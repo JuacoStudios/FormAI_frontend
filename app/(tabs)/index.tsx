@@ -69,9 +69,6 @@ export default function ScanScreen() {
         const response = await fetch(requestUrl, {
           method: 'POST',
           body: formData,
-          headers: {
-            'Content-Type': 'multipart/form-data',
-          },
         });
 
         console.log('Estado de la respuesta:', response.status);
