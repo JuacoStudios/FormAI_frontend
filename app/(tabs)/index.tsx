@@ -5,6 +5,29 @@ import { Camera as CameraIcon, Camera as FlipCamera } from 'lucide-react-native'
 import { BlurView } from 'expo-blur';
 import { config } from '../config';
 
+// Helper function to convert base64 to Blob
+const base64ToBlob = (base64: string, mimeType: string = 'image/jpeg'): Blob => {
+  try {
+    // Remove data URL prefix if present
+    const cleanBase64 = base64.replace(/^data:image\/\w+;base64,/, '');
+    
+    // Convert base64 to binary string
+    const binaryString = atob(cleanBase64);
+    
+    // Convert binary string to Uint8Array
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    
+    // Create Blob
+    return new Blob([bytes], { type: mimeType });
+  } catch (error) {
+    console.error('Error converting base64 to Blob:', error);
+    throw new Error('Failed to process image data');
+  }
+};
+
 export default function ScanScreen() {
   const [facing, setFacing] = useState<CameraType>('back');
   const [permission, requestPermission] = useCameraPermissions();
@@ -46,21 +69,18 @@ export default function ScanScreen() {
           throw new Error('No se pudo capturar la imagen');
         }
 
-        // Limpiar el prefijo de la imagen base64 si existe
-        const cleanBase64 = photo.base64.replace(/^data:image\/\w+;base64,/, '');
-        
-        console.log('Longitud de la imagen base64:', cleanBase64.length);
+        console.log('Longitud de la imagen base64:', photo.base64.length);
         console.log('Configuración del backend:', {
           apiBaseUrl: config.backend.apiBaseUrl
         });
 
-        // Crear FormData para enviar la imagen al backend
+        // Convertir base64 a Blob para que multer pueda procesarlo
+        const blob = base64ToBlob(photo.base64, 'image/jpeg');
+        console.log('Blob creado:', blob.size, 'bytes');
+
+        // Crear FormData con el Blob
         const formData = new FormData();
-        formData.append('image', {
-          uri: `data:image/jpeg;base64,${cleanBase64}`,
-          type: 'image/jpeg',
-          name: 'equipment.jpg'
-        } as any);
+        formData.append('image', blob, 'equipment.jpg');
 
         const requestUrl = `${config.backend.apiBaseUrl}/analyze`;
         console.log('🌐 Making request to:', requestUrl);
