@@ -31,7 +31,7 @@ export async function POST(request: Request) {
     }
 
     // Call OpenAI Vision API using centralized config
-    const openaiResponse = await fetch(config.openai.apiUrl, {
+    const openaiResponse = await fetch("https://formai-backend-dc3u.onrender.com/api/analyze", {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
