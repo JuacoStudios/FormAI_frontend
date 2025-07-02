@@ -4,6 +4,9 @@ import { CameraView, CameraType, useCameraPermissions, Camera } from 'expo-camer
 import { Camera as CameraIcon, Camera as FlipCamera } from 'lucide-react-native';
 import { BlurView } from 'expo-blur';
 import { config } from '../config';
+import { usePaywall } from '@/hooks/usePaywall';
+import PaywallScreen from '@/components/PaywallScreen';
+import { Linking } from 'react-native';
 
 // Helper function to convert base64 to Blob
 const base64ToBlob = (base64: string, mimeType: string = 'image/jpeg'): Blob => {
@@ -34,6 +37,15 @@ export default function ScanScreen() {
   const [analyzing, setAnalyzing] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const cameraRef = useRef<CameraView>(null);
+  
+  const {
+    shouldShowPaywall,
+    isPremium,
+    hasCompletedFirstScan,
+    markFirstScanComplete,
+    setPremiumStatus,
+    hidePaywall,
+  } = usePaywall();
 
   if (!permission) {
     return <View />;
@@ -111,6 +123,11 @@ export default function ScanScreen() {
         }
 
         setResult(data.message);
+        
+        // Mark first scan as complete if this is the first successful scan
+        if (!hasCompletedFirstScan) {
+          await markFirstScanComplete();
+        }
       } catch (error) {
         console.error('Error completo:', error);
         setResult(error instanceof Error ? error.message : 'Error al analizar la imagen. Por favor, intenta de nuevo.');
@@ -122,6 +139,42 @@ export default function ScanScreen() {
 
   const toggleCameraFacing = () => {
     setFacing(current => (current === 'back' ? 'front' : 'back'));
+  };
+
+  const handlePurchase = async (productId: string) => {
+    try {
+      // TODO: Implement RevenueCat purchase
+      console.log('Purchase initiated for:', productId);
+      
+      // Mock successful purchase for development
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      await setPremiumStatus(true);
+      hidePaywall();
+    } catch (error) {
+      console.error('Purchase failed:', error);
+      throw error;
+    }
+  };
+
+  const handleRestore = async () => {
+    try {
+      // TODO: Implement RevenueCat restore
+      console.log('Restore purchases initiated');
+      
+      // Mock restore for development
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    } catch (error) {
+      console.error('Restore failed:', error);
+      throw error;
+    }
+  };
+
+  const handleTerms = () => {
+    Linking.openURL('https://your-app.com/terms');
+  };
+
+  const handlePrivacy = () => {
+    Linking.openURL('https://your-app.com/privacy');
   };
 
   return (
@@ -159,6 +212,15 @@ export default function ScanScreen() {
           </View>
         </View>
       </CameraView>
+
+      <PaywallScreen
+        visible={shouldShowPaywall}
+        onClose={hidePaywall}
+        onPurchase={handlePurchase}
+        onRestore={handleRestore}
+        onTerms={handleTerms}
+        onPrivacy={handlePrivacy}
+      />
     </View>
   );
 }
