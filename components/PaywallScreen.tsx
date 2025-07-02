@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
-import { X, Unlock, Image as ImageIcon, Zap, Star } from 'lucide-react-native';
+import { X, Clock as Unlock, Image as ImageIcon, Zap, Star } from 'lucide-react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
