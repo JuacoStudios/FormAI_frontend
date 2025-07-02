@@ -149,7 +149,7 @@ export default function ScanScreen() {
       // Mock successful purchase for development
       await new Promise(resolve => setTimeout(resolve, 2000));
       await setPremiumStatus(true);
-      hidePaywall();
+      await hidePaywall(false); // Don't mark as dismissed since purchase was successful
     } catch (error) {
       console.error('Purchase failed:', error);
       throw error;
@@ -175,6 +175,10 @@ export default function ScanScreen() {
 
   const handlePrivacy = () => {
     Linking.openURL('https://your-app.com/privacy');
+  };
+
+  const handleClosePaywall = () => {
+    hidePaywall(true); // Mark as dismissed
   };
 
   return (
@@ -215,7 +219,7 @@ export default function ScanScreen() {
 
       <PaywallScreen
         visible={shouldShowPaywall}
-        onClose={hidePaywall}
+        onClose={handleClosePaywall}
         onPurchase={handlePurchase}
         onRestore={handleRestore}
         onTerms={handleTerms}

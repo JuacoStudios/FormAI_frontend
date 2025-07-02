@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
-import { X, Check, Crown, Zap, Shield, Star, Download, Image as ImageIcon } from 'lucide-react-native';
+import { X, Unlock, Image as ImageIcon, Zap, Star } from 'lucide-react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -22,6 +22,7 @@ import Animated, {
   interpolate,
   FadeIn,
   SlideInUp,
+  ZoomIn,
 } from 'react-native-reanimated';
 
 const { width, height } = Dimensions.get('window');
@@ -31,8 +32,10 @@ interface PricingOption {
   title: string;
   price: string;
   period: string;
+  originalPrice?: string;
   badge?: string;
   savings?: string;
+  benefit: string;
 }
 
 interface PaywallProps {
@@ -47,42 +50,39 @@ interface PaywallProps {
 
 const pricingOptions: PricingOption[] = [
   {
-    id: 'weekly',
-    title: 'Weekly',
-    price: '$9.99',
-    period: '/week',
+    id: 'monthly',
+    title: 'Monthly',
+    price: '$10',
+    period: '/month',
+    benefit: 'x10 more scans per month',
   },
   {
     id: 'annual',
     title: 'Annual',
-    price: '$119.99',
+    price: '$99',
     period: '/year',
+    originalPrice: '$120',
     badge: 'Best Deal',
-    savings: 'Save 76%',
-  },
-  {
-    id: 'monthly',
-    title: 'Monthly',
-    price: '$19.99',
-    period: '/month',
+    savings: 'Save 17%',
+    benefit: 'x10 more scans per month',
   },
 ];
 
 const features = [
   {
+    icon: Unlock,
+    title: 'x10 more scans per month',
+    description: 'Analyze unlimited gym equipment',
+  },
+  {
     icon: ImageIcon,
-    title: 'Unlimited image generations',
-    description: 'Generate as many images as you want',
+    title: 'No watermarks on AI results',
+    description: 'Clean, professional analysis results',
   },
   {
-    icon: Download,
-    title: 'High-quality downloads',
-    description: 'Download in full resolution',
-  },
-  {
-    icon: Shield,
-    title: 'No watermarks',
-    description: 'Clean images without branding',
+    icon: Zap,
+    title: 'Early access to new features',
+    description: 'Be first to try latest updates',
   },
 ];
 
@@ -98,11 +98,16 @@ export default function PaywallScreen({
   const [selectedOption, setSelectedOption] = useState('annual');
   const [purchasing, setPurchasing] = useState(false);
   
+  const pulseAnimation = useSharedValue(1);
   const glowAnimation = useSharedValue(0);
-  const scaleAnimation = useSharedValue(1);
 
   useEffect(() => {
     if (visible) {
+      pulseAnimation.value = withRepeat(
+        withSpring(1.05, { duration: 1500 }),
+        -1,
+        true
+      );
       glowAnimation.value = withRepeat(
         withTiming(1, { duration: 2000 }),
         -1,
@@ -111,9 +116,15 @@ export default function PaywallScreen({
     }
   }, [visible]);
 
+  const animatedPulseStyle = useAnimatedStyle(() => {
+    return {
+      transform: [{ scale: pulseAnimation.value }],
+    };
+  });
+
   const animatedGlowStyle = useAnimatedStyle(() => {
     return {
-      opacity: interpolate(glowAnimation.value, [0, 1], [0.3, 0.8]),
+      opacity: interpolate(glowAnimation.value, [0, 1], [0.4, 0.8]),
     };
   });
 
@@ -140,9 +151,11 @@ export default function PaywallScreen({
 
   if (!visible) return null;
 
+  const selectedPlan = pricingOptions.find(option => option.id === selectedOption);
+
   return (
     <View style={styles.overlay}>
-      <BlurView intensity={20} style={styles.blurContainer}>
+      <BlurView intensity={30} style={styles.blurContainer}>
         <SafeAreaView style={styles.container}>
           {/* Header */}
           <View style={styles.header}>
@@ -151,7 +164,7 @@ export default function PaywallScreen({
               onPress={onClose}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
-              <X color="#FFFFFF" size={24} />
+              <X color="#FFFFFF" size={20} />
             </TouchableOpacity>
           </View>
 
@@ -165,20 +178,19 @@ export default function PaywallScreen({
               entering={FadeIn.delay(200)}
               style={styles.heroSection}
             >
-              <View style={styles.iconContainer}>
+              <Animated.View style={[styles.iconContainer, animatedPulseStyle]}>
                 <Animated.View style={[styles.glowEffect, animatedGlowStyle]} />
                 <LinearGradient
-                  colors={['#6366F1', '#8B5CF6', '#EC4899']}
+                  colors={['#00e676', '#00c853', '#1de9b6']}
                   style={styles.iconGradient}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
                 >
-                  <Crown color="#FFFFFF" size={32} />
+                  <Star color="#000000" size={28} fill="#000000" />
                 </LinearGradient>
-              </View>
+              </Animated.View>
               
               <Text style={styles.title}>Unlock Premium</Text>
-              <Text style={styles.subtitle}>
-                Get unlimited access to all premium features
-              </Text>
             </Animated.View>
 
             {/* Features */}
@@ -192,14 +204,10 @@ export default function PaywallScreen({
                   entering={SlideInUp.delay(500 + index * 100)}
                   style={styles.featureItem}
                 >
-                  <View style={styles.featureIcon}>
-                    <feature.icon color="#6366F1" size={20} />
+                  <View style={styles.featureIconContainer}>
+                    <feature.icon color="#00e676" size={18} strokeWidth={2.5} />
                   </View>
-                  <View style={styles.featureContent}>
-                    <Text style={styles.featureTitle}>{feature.title}</Text>
-                    <Text style={styles.featureDescription}>{feature.description}</Text>
-                  </View>
-                  <Check color="#10B981" size={20} />
+                  <Text style={styles.featureText}>{feature.title}</Text>
                 </Animated.View>
               ))}
             </Animated.View>
@@ -210,50 +218,54 @@ export default function PaywallScreen({
               style={styles.pricingSection}
             >
               {pricingOptions.map((option, index) => (
-                <TouchableOpacity
+                <Animated.View
                   key={option.id}
-                  style={[
-                    styles.pricingOption,
-                    selectedOption === option.id && styles.selectedOption,
-                  ]}
-                  onPress={() => setSelectedOption(option.id)}
-                  activeOpacity={0.8}
+                  entering={ZoomIn.delay(900 + index * 100)}
                 >
-                  {option.badge && (
-                    <View style={styles.badge}>
-                      <Text style={styles.badgeText}>{option.badge}</Text>
+                  <TouchableOpacity
+                    style={[
+                      styles.pricingOption,
+                      selectedOption === option.id && styles.selectedOption,
+                    ]}
+                    onPress={() => setSelectedOption(option.id)}
+                    activeOpacity={0.8}
+                  >
+                    {option.badge && (
+                      <View style={styles.badge}>
+                        <Text style={styles.badgeText}>{option.badge}</Text>
+                      </View>
+                    )}
+                    
+                    <View style={styles.radioContainer}>
+                      <View style={[
+                        styles.radioButton,
+                        selectedOption === option.id && styles.radioSelected
+                      ]}>
+                        {selectedOption === option.id && (
+                          <View style={styles.radioInner} />
+                        )}
+                      </View>
                     </View>
-                  )}
-                  
-                  <View style={styles.radioContainer}>
-                    <View style={[
-                      styles.radioButton,
-                      selectedOption === option.id && styles.radioSelected
-                    ]}>
-                      {selectedOption === option.id && (
-                        <View style={styles.radioInner} />
+
+                    <View style={styles.pricingContent}>
+                      <Text style={styles.pricingTitle}>{option.title}</Text>
+                      {option.savings && (
+                        <Text style={styles.savingsText}>{option.savings}</Text>
                       )}
                     </View>
-                  </View>
 
-                  <View style={styles.pricingContent}>
-                    <Text style={styles.pricingTitle}>{option.title}</Text>
-                    {option.savings && (
-                      <Text style={styles.savingsText}>{option.savings}</Text>
-                    )}
-                  </View>
-
-                  <View style={styles.priceContainer}>
-                    <Text style={styles.price}>{option.price}</Text>
-                    <Text style={styles.period}>{option.period}</Text>
-                  </View>
-                </TouchableOpacity>
+                    <View style={styles.priceContainer}>
+                      <Text style={styles.price}>{option.price}</Text>
+                      <Text style={styles.period}>{option.period}</Text>
+                    </View>
+                  </TouchableOpacity>
+                </Animated.View>
               ))}
             </Animated.View>
 
             {/* Trial Info */}
             <Animated.View 
-              entering={FadeIn.delay(1000)}
+              entering={FadeIn.delay(1200)}
               style={styles.trialInfo}
             >
               <Text style={styles.trialText}>
@@ -263,21 +275,23 @@ export default function PaywallScreen({
 
             {/* Purchase Button */}
             <Animated.View 
-              entering={SlideInUp.delay(1200)}
+              entering={SlideInUp.delay(1400)}
               style={styles.buttonContainer}
             >
               <TouchableOpacity
                 style={[styles.purchaseButton, purchasing && styles.purchaseButtonDisabled]}
                 onPress={handlePurchase}
                 disabled={purchasing || loading}
-                activeOpacity={0.8}
+                activeOpacity={0.9}
               >
                 <LinearGradient
-                  colors={['#6366F1', '#8B5CF6']}
+                  colors={['#00e676', '#00c853']}
                   style={styles.buttonGradient}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
                 >
                   {purchasing ? (
-                    <ActivityIndicator color="#FFFFFF" size="small" />
+                    <ActivityIndicator color="#000000" size="small" />
                   ) : (
                     <Text style={styles.purchaseButtonText}>Start Free Trial</Text>
                   )}
@@ -287,19 +301,19 @@ export default function PaywallScreen({
 
             {/* Footer Links */}
             <Animated.View 
-              entering={FadeIn.delay(1400)}
+              entering={FadeIn.delay(1600)}
               style={styles.footer}
             >
-              <TouchableOpacity onPress={handleRestore}>
+              <TouchableOpacity onPress={handleRestore} style={styles.footerButton}>
                 <Text style={styles.footerLink}>Restore Purchases</Text>
               </TouchableOpacity>
               
               <View style={styles.footerSeparator}>
-                <TouchableOpacity onPress={onTerms}>
+                <TouchableOpacity onPress={onTerms} style={styles.footerButton}>
                   <Text style={styles.footerLink}>Terms</Text>
                 </TouchableOpacity>
                 <Text style={styles.footerSeparatorText}> & </Text>
-                <TouchableOpacity onPress={onPrivacy}>
+                <TouchableOpacity onPress={onPrivacy} style={styles.footerButton}>
                   <Text style={styles.footerLink}>Privacy</Text>
                 </TouchableOpacity>
               </View>
@@ -322,11 +336,11 @@ const styles = StyleSheet.create({
   },
   blurContainer: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
   },
   container: {
     flex: 1,
-    backgroundColor: 'rgba(10, 10, 10, 0.95)',
+    backgroundColor: 'rgba(26, 26, 26, 0.98)',
   },
   header: {
     flexDirection: 'row',
@@ -336,9 +350,9 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
   },
   closeButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
     justifyContent: 'center',
     alignItems: 'center',
@@ -347,26 +361,27 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: 20,
+    paddingHorizontal: 24,
     paddingBottom: 40,
   },
   heroSection: {
     alignItems: 'center',
-    marginBottom: 40,
+    marginBottom: 48,
+    marginTop: 20,
   },
   iconContainer: {
     position: 'relative',
-    marginBottom: 20,
+    marginBottom: 24,
   },
   glowEffect: {
     position: 'absolute',
-    top: -10,
-    left: -10,
-    right: -10,
-    bottom: -10,
-    borderRadius: 40,
-    backgroundColor: '#6366F1',
-    opacity: 0.3,
+    top: -15,
+    left: -15,
+    right: -15,
+    bottom: -15,
+    borderRadius: 50,
+    backgroundColor: '#00e676',
+    opacity: 0.4,
   },
   iconGradient: {
     width: 80,
@@ -374,19 +389,18 @@ const styles = StyleSheet.create({
     borderRadius: 40,
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: '#00e676',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.6,
+    shadowRadius: 20,
+    elevation: 20,
   },
   title: {
-    fontSize: 32,
-    fontWeight: '700',
+    fontSize: 36,
+    fontWeight: '800',
     color: '#FFFFFF',
-    marginBottom: 8,
     textAlign: 'center',
-  },
-  subtitle: {
-    fontSize: 16,
-    color: '#9CA3AF',
-    textAlign: 'center',
-    lineHeight: 24,
+    letterSpacing: -0.5,
   },
   featuresSection: {
     marginBottom: 40,
@@ -396,67 +410,69 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 16,
     paddingHorizontal: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
     borderRadius: 16,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderColor: 'rgba(0, 230, 118, 0.2)',
   },
-  featureIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(99, 102, 241, 0.2)',
+  featureIconContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(0, 230, 118, 0.15)',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 16,
   },
-  featureContent: {
-    flex: 1,
-  },
-  featureTitle: {
+  featureText: {
     fontSize: 16,
     fontWeight: '600',
     color: '#FFFFFF',
-    marginBottom: 4,
-  },
-  featureDescription: {
-    fontSize: 14,
-    color: '#9CA3AF',
-    lineHeight: 20,
+    flex: 1,
   },
   pricingSection: {
-    marginBottom: 30,
+    marginBottom: 32,
   },
   pricingOption: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 20,
     paddingHorizontal: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderRadius: 16,
-    marginBottom: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    borderRadius: 20,
+    marginBottom: 16,
     borderWidth: 2,
     borderColor: 'rgba(255, 255, 255, 0.1)',
     position: 'relative',
   },
   selectedOption: {
-    borderColor: '#6366F1',
-    backgroundColor: 'rgba(99, 102, 241, 0.1)',
+    borderColor: '#00e676',
+    backgroundColor: 'rgba(0, 230, 118, 0.08)',
+    shadowColor: '#00e676',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
   },
   badge: {
     position: 'absolute',
-    top: -8,
+    top: -10,
     right: 20,
-    backgroundColor: '#6366F1',
+    backgroundColor: '#00e676',
     paddingHorizontal: 12,
-    paddingVertical: 4,
+    paddingVertical: 6,
     borderRadius: 12,
+    shadowColor: '#00e676',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.5,
+    shadowRadius: 8,
+    elevation: 5,
   },
   badgeText: {
     fontSize: 12,
-    fontWeight: '600',
-    color: '#FFFFFF',
+    fontWeight: '700',
+    color: '#000000',
   },
   radioContainer: {
     marginRight: 16,
@@ -466,92 +482,105 @@ const styles = StyleSheet.create({
     height: 24,
     borderRadius: 12,
     borderWidth: 2,
-    borderColor: '#4B5563',
+    borderColor: '#666666',
     justifyContent: 'center',
     alignItems: 'center',
   },
   radioSelected: {
-    borderColor: '#6366F1',
+    borderColor: '#00e676',
   },
   radioInner: {
     width: 12,
     height: 12,
     borderRadius: 6,
-    backgroundColor: '#6366F1',
+    backgroundColor: '#00e676',
   },
   pricingContent: {
     flex: 1,
   },
   pricingTitle: {
     fontSize: 18,
-    fontWeight: '600',
+    fontWeight: '700',
     color: '#FFFFFF',
-    marginBottom: 2,
+    marginBottom: 4,
   },
   savingsText: {
     fontSize: 14,
-    color: '#10B981',
-    fontWeight: '500',
+    color: '#00e676',
+    fontWeight: '600',
   },
   priceContainer: {
     alignItems: 'flex-end',
   },
   price: {
-    fontSize: 20,
-    fontWeight: '700',
+    fontSize: 24,
+    fontWeight: '800',
     color: '#FFFFFF',
   },
   period: {
     fontSize: 14,
-    color: '#9CA3AF',
+    color: '#888888',
+    fontWeight: '500',
   },
   trialInfo: {
     alignItems: 'center',
-    marginBottom: 30,
+    marginBottom: 32,
   },
   trialText: {
     fontSize: 14,
-    color: '#9CA3AF',
+    color: '#AAAAAA',
     textAlign: 'center',
+    fontWeight: '500',
   },
   buttonContainer: {
-    marginBottom: 30,
+    marginBottom: 32,
   },
   purchaseButton: {
-    borderRadius: 16,
+    borderRadius: 20,
     overflow: 'hidden',
+    shadowColor: '#00e676',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.4,
+    shadowRadius: 16,
+    elevation: 12,
   },
   purchaseButtonDisabled: {
     opacity: 0.6,
   },
   buttonGradient: {
-    paddingVertical: 18,
+    paddingVertical: 20,
     paddingHorizontal: 32,
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 56,
+    minHeight: 60,
   },
   purchaseButtonText: {
     fontSize: 18,
-    fontWeight: '700',
-    color: '#FFFFFF',
+    fontWeight: '800',
+    color: '#000000',
+    letterSpacing: 0.5,
   },
   footer: {
     alignItems: 'center',
     paddingBottom: 20,
   },
+  footerButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+  },
   footerLink: {
     fontSize: 14,
-    color: '#6B7280',
-    textDecorationLine: 'underline',
+    color: '#888888',
+    fontWeight: '500',
   },
   footerSeparator: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 12,
+    marginTop: 16,
   },
   footerSeparatorText: {
     fontSize: 14,
-    color: '#6B7280',
+    color: '#888888',
+    fontWeight: '500',
   },
 });
