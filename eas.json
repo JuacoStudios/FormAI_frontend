@@ -1,0 +1,35 @@
+{
+  "cli": {
+    "version": ">=3.13.0"
+  },
+  "build": {
+    "development": {
+      "android": {
+        "developmentClient": true,
+        "distribution": "internal",
+        "env": {
+          "EXPO_PUBLIC_API_BASE_URL": "http://localhost:8080/api",
+          "EXPO_ANDROID_KOTLIN_VERSION": "1.9.25"
+        }
+      }
+    },
+    "preview": {
+      "android": {
+        "distribution": "internal",
+        "env": {
+          "EXPO_PUBLIC_API_BASE_URL": "https://formai-backend-dc3u.onrender.com/api",
+          "EXPO_ANDROID_KOTLIN_VERSION": "1.9.25"
+        }
+      }
+    },
+    "production": {
+      "android": {
+        "buildType": "app-bundle",
+        "env": {
+          "EXPO_PUBLIC_API_BASE_URL": "https://formai-backend-dc3u.onrender.com/api",
+          "EXPO_ANDROID_KOTLIN_VERSION": "1.9.25"
+        }
+      }
+    }
+  }
+}

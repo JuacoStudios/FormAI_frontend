@@ -82,6 +82,10 @@ export default function ScanScreen() {
         const formData = new FormData();
         formData.append('image', blob, 'equipment.jpg');
 
+        for (let [key, value] of formData.entries()) {
+          console.log(`[FormData] ${key}:`, value);
+        }
+
         const requestUrl = `${config.backend.apiBaseUrl}/analyze`;
         console.log('🌐 Making request to:', requestUrl);
         
