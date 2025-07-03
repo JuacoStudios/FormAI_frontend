@@ -3,10 +3,14 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { CameraView, CameraType, useCameraPermissions, Camera } from 'expo-camera';
 import { Camera as CameraIcon, Camera as FlipCamera } from 'lucide-react-native';
 import { BlurView } from 'expo-blur';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { config } from '../config';
 import { usePaywall } from '@/hooks/usePaywall';
 import PaywallScreen from '@/components/PaywallScreen';
 import { Linking } from 'react-native';
+
+// Storage key for tracking scan attempts
+const SCAN_COUNT_KEY = 'scanAttemptCount';
 
 // Helper function to convert base64 to Blob
 const base64ToBlob = (base64: string, mimeType: string = 'image/jpeg'): Blob => {
@@ -36,6 +40,8 @@ export default function ScanScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const [analyzing, setAnalyzing] = useState(false);
   const [result, setResult] = useState<string | null>(null);
+  const [scanCount, setScanCount] = useState<number>(0);
+  const [showPaywallAfterScan, setShowPaywallAfterScan] = useState<boolean>(false);
   const cameraRef = useRef<CameraView>(null);
   
   const {
@@ -45,7 +51,68 @@ export default function ScanScreen() {
     markFirstScanComplete,
     setPremiumStatus,
     hidePaywall,
+    showPaywall,
   } = usePaywall();
+
+  // Load scan count from AsyncStorage on component mount
+  useEffect(() => {
+    loadScanCount();
+  }, []);
+
+  // Load the current scan count from persistent storage
+  const loadScanCount = async () => {
+    try {
+      const storedCount = await AsyncStorage.getItem(SCAN_COUNT_KEY);
+      const count = storedCount ? parseInt(storedCount, 10) : 0;
+      setScanCount(count);
+      console.log('📊 Loaded scan count:', count);
+    } catch (error) {
+      console.error('Error loading scan count:', error);
+      setScanCount(0);
+    }
+  };
+
+  // Increment scan count and save to AsyncStorage
+  const incrementScanCount = async () => {
+    try {
+      const newCount = scanCount + 1;
+      await AsyncStorage.setItem(SCAN_COUNT_KEY, newCount.toString());
+      setScanCount(newCount);
+      console.log('📊 Updated scan count:', newCount);
+      return newCount;
+    } catch (error) {
+      console.error('Error saving scan count:', error);
+      return scanCount + 1;
+    }
+  };
+
+  // Reset scan count for testing purposes
+  // Call this function to reset the counter: resetScanCount()
+  const resetScanCount = async () => {
+    try {
+      await AsyncStorage.removeItem(SCAN_COUNT_KEY);
+      setScanCount(0);
+      console.log('🔄 Scan count reset to 0');
+    } catch (error) {
+      console.error('Error resetting scan count:', error);
+    }
+  };
+
+  // Utility function to check current scan count (for debugging)
+  const checkScanCount = async () => {
+    try {
+      const storedCount = await AsyncStorage.getItem(SCAN_COUNT_KEY);
+      const count = storedCount ? parseInt(storedCount, 10) : 0;
+      console.log('🔍 Current scan count:', count);
+      return count;
+    } catch (error) {
+      console.error('Error checking scan count:', error);
+      return 0;
+    }
+  };
+
+  // For testing: Uncomment the line below to reset scan count on app start
+  // useEffect(() => { resetScanCount(); }, []);
 
   if (!permission) {
     return <View />;
@@ -65,10 +132,17 @@ export default function ScanScreen() {
   }
 
   const handleCapture = async () => {
+    // Si el usuario NO es premium y ya hizo al menos 1 escaneo, bloquear y mostrar paywall
+    if (!isPremium && scanCount >= 1) {
+      setShowPaywallAfterScan(true);
+      showPaywall();
+      setAnalyzing(false);
+      return;
+    }
+    // Si es premium o es el primer escaneo, permitir escanear
     if (cameraRef.current && !analyzing) {
       setAnalyzing(true);
       setResult(null);
-      
       try {
         const photo = await cameraRef.current?.takePictureAsync({
           base64: true,
@@ -94,9 +168,12 @@ export default function ScanScreen() {
         const formData = new FormData();
         formData.append('image', blob, 'equipment.jpg');
 
-        for (let [key, value] of formData.entries()) {
-          console.log(`[FormData] ${key}:`, value);
-        }
+        // Mostrar los pares clave-valor de FormData (para debugging)
+        // NOTA: FormData.entries() no está disponible en React Native, así que omitimos este log en producción
+        // Puedes usar un polyfill o inspeccionar manualmente si es necesario
+        // for (let [key, value] of formData.entries()) {
+        //   console.log(`[FormData] ${key}:`, value);
+        // }
 
         const requestUrl = `${config.backend.apiBaseUrl}/analyze`;
         console.log('🌐 Making request to:', requestUrl);
@@ -124,9 +201,15 @@ export default function ScanScreen() {
 
         setResult(data.message);
         
-        // Mark first scan as complete if this is the first successful scan
+        // Incrementar el contador solo después de un escaneo exitoso
+        const newCount = await incrementScanCount();
+        // Marcar el primer escaneo como completo si aplica
         if (!hasCompletedFirstScan) {
           await markFirstScanComplete();
+        }
+        // Log para saber que el siguiente escaneo será bloqueado si no es premium
+        if (!isPremium && newCount === 1) {
+          console.log('⚠️ Next scan will trigger paywall');
         }
       } catch (error) {
         console.error('Error completo:', error);
@@ -150,6 +233,9 @@ export default function ScanScreen() {
       await new Promise(resolve => setTimeout(resolve, 2000));
       await setPremiumStatus(true);
       await hidePaywall(false); // Don't mark as dismissed since purchase was successful
+      
+      // Reset scan count after successful purchase to give user more scans
+      await resetScanCount();
     } catch (error) {
       console.error('Purchase failed:', error);
       throw error;
@@ -179,6 +265,7 @@ export default function ScanScreen() {
 
   const handleClosePaywall = () => {
     hidePaywall(true); // Mark as dismissed
+    setShowPaywallAfterScan(false);
   };
 
   return (
@@ -214,11 +301,38 @@ export default function ScanScreen() {
               <CameraIcon color="white" size={32} />
             </TouchableOpacity>
           </View>
+
+          {/* Scan counter indicator (for testing) */}
+          {__DEV__ && !isPremium && scanCount < 1 && (
+            <View style={styles.debugContainer}>
+              <Text style={styles.debugText}>
+                Scans: {scanCount} (Free)
+              </Text>
+              <TouchableOpacity
+                style={styles.debugButton}
+                onPress={resetScanCount}>
+                <Text style={styles.debugButtonText}>Reset</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+          {__DEV__ && isPremium && (
+            <View style={styles.debugContainer}>
+              <Text style={styles.debugText}>
+                Scans: ∞ (Premium)
+              </Text>
+              <TouchableOpacity
+                style={styles.debugButton}
+                onPress={resetScanCount}>
+                <Text style={styles.debugButtonText}>Reset</Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
       </CameraView>
 
+      {/* PaywallScreen is rendered as a full-screen modal, blocking interaction with the scanner */}
       <PaywallScreen
-        visible={shouldShowPaywall}
+        visible={shouldShowPaywall || showPaywallAfterScan}
         onClose={handleClosePaywall}
         onPurchase={handlePurchase}
         onRestore={handleRestore}
@@ -308,5 +422,31 @@ const styles = StyleSheet.create({
     color: '#00e676',
     fontSize: 16,
     fontWeight: '600',
+  },
+  debugContainer: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  debugText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  debugButton: {
+    backgroundColor: '#00e676',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  debugButtonText: {
+    color: 'black',
+    fontSize: 12,
+    fontWeight: '700',
   },
 });

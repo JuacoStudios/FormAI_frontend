@@ -293,7 +293,7 @@ export default function PaywallScreen({
                   {purchasing ? (
                     <ActivityIndicator color="#000000" size="small" />
                   ) : (
-                    <Text style={styles.purchaseButtonText}>Start Free Trial</Text>
+                    <Text style={styles.purchaseButtonText}>Get Premium</Text>
                   )}
                 </LinearGradient>
               </TouchableOpacity>
