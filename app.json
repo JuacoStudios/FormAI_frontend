@@ -2,7 +2,7 @@
   "expo": {
     "name": "Bolt Expo App",
     "slug": "bolt-expo-app",
-    "version": "1.0.0",
+    "version": "1.0.6",                             
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "myapp",
@@ -22,7 +22,10 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/icon.png",
         "backgroundColor": "#ffffff"
-      }
+      },
+      "package": "com.yourcompany.formai",
+      "versionCode": 6,
+      "targetSdkVersion": 35                             
     },
     "web": {
       "bundler": "metro",
@@ -36,7 +39,13 @@
       "typedRoutes": true
     },
     "extra": {
-      "EXPO_PUBLIC_API_BASE_URL": "https://formai-backend-dc3u.onrender.com/api"
+      "EXPO_PUBLIC_API_BASE_URL": "https://formai-backend-dc3u.onrender.com/api",
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "fdc90e1d-9932-4610-aaf2-c398b3ba7c8a"
+      }
     }
   }
 }

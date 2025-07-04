@@ -132,14 +132,6 @@ export default function ScanScreen() {
   }
 
   const handleCapture = async () => {
-    // Si el usuario NO es premium y ya hizo al menos 1 escaneo, bloquear y mostrar paywall
-    if (!isPremium && scanCount >= 1) {
-      setShowPaywallAfterScan(true);
-      showPaywall();
-      setAnalyzing(false);
-      return;
-    }
-    // Si es premium o es el primer escaneo, permitir escanear
     if (cameraRef.current && !analyzing) {
       setAnalyzing(true);
       setResult(null);
@@ -150,66 +142,42 @@ export default function ScanScreen() {
           exif: false,
           skipProcessing: true
         });
-
         if (!photo?.base64) {
           throw new Error('No se pudo capturar la imagen');
         }
-
-        console.log('Longitud de la imagen base64:', photo.base64.length);
-        console.log('Configuración del backend:', {
-          apiBaseUrl: config.backend.apiBaseUrl
-        });
-
-        // Convertir base64 a Blob para que multer pueda procesarlo
         const blob = base64ToBlob(photo.base64, 'image/jpeg');
-        console.log('Blob creado:', blob.size, 'bytes');
-
-        // Crear FormData con el Blob
         const formData = new FormData();
         formData.append('image', blob, 'equipment.jpg');
-
-        // Mostrar los pares clave-valor de FormData (para debugging)
-        // NOTA: FormData.entries() no está disponible en React Native, así que omitimos este log en producción
-        // Puedes usar un polyfill o inspeccionar manualmente si es necesario
-        // for (let [key, value] of formData.entries()) {
-        //   console.log(`[FormData] ${key}:`, value);
-        // }
-
         const requestUrl = `${config.backend.apiBaseUrl}/analyze`;
-        console.log('🌐 Making request to:', requestUrl);
-        
-        console.log('Enviando solicitud al backend...');
         const response = await fetch(requestUrl, {
           method: 'POST',
           body: formData,
         });
-
-        console.log('Estado de la respuesta:', response.status);
         const responseText = await response.text();
-        console.log('Respuesta completa:', responseText);
-
         if (!response.ok) {
           throw new Error(`Error en el backend: ${response.status} - ${responseText}`);
         }
-
         const data = JSON.parse(responseText);
-        console.log('Datos parseados:', data);
-
         if (!data.success || !data.message) {
           throw new Error('La respuesta del backend no tiene el formato esperado');
         }
-
         setResult(data.message);
-        
         // Incrementar el contador solo después de un escaneo exitoso
         const newCount = await incrementScanCount();
-        // Marcar el primer escaneo como completo si aplica
         if (!hasCompletedFirstScan) {
           await markFirstScanComplete();
         }
-        // Log para saber que el siguiente escaneo será bloqueado si no es premium
+        // Mostrar el paywall solo después de que el usuario vea el resultado del primer escaneo exitoso
         if (!isPremium && newCount === 1) {
-          console.log('⚠️ Next scan will trigger paywall');
+          setTimeout(() => {
+            setShowPaywallAfterScan(true);
+            showPaywall();
+          }, 1000); // Delay para asegurar que el usuario vea el resultado antes del paywall
+        }
+        // Si el usuario no es premium y ya hizo su primer escaneo, bloquear futuros escaneos
+        if (!isPremium && newCount > 1) {
+          setShowPaywallAfterScan(true);
+          showPaywall();
         }
       } catch (error) {
         console.error('Error completo:', error);
