@@ -24,6 +24,7 @@ import Animated, {
   SlideInUp,
   ZoomIn,
 } from 'react-native-reanimated';
+import Purchases from 'react-native-purchases';
 
 const { width, height } = Dimensions.get('window');
 
@@ -97,6 +98,9 @@ export default function PaywallScreen({
 }: PaywallProps) {
   const [selectedOption, setSelectedOption] = useState('annual');
   const [purchasing, setPurchasing] = useState(false);
+  const [offerings, setOfferings] = useState<any>(null);
+  const [packages, setPackages] = useState<any[]>([]);
+  const [offeringsLoading, setOfferingsLoading] = useState(true);
   
   const pulseAnimation = useSharedValue(1);
   const glowAnimation = useSharedValue(0);
@@ -116,6 +120,28 @@ export default function PaywallScreen({
     }
   }, [visible]);
 
+  useEffect(() => {
+    async function fetchOfferings() {
+      setOfferingsLoading(true);
+      try {
+        const result = await Purchases.getOfferings();
+        setOfferings(result);
+        if (result && result.current && result.current.availablePackages) {
+          setPackages(result.current.availablePackages);
+        } else {
+          setPackages([]);
+        }
+        console.log('RevenueCat offerings:', result);
+      } catch (error) {
+        setPackages([]);
+        console.error('Error fetching RevenueCat offerings:', error);
+      } finally {
+        setOfferingsLoading(false);
+      }
+    }
+    fetchOfferings();
+  }, []);
+
   const animatedPulseStyle = useAnimatedStyle(() => {
     return {
       transform: [{ scale: pulseAnimation.value }],
@@ -129,13 +155,24 @@ export default function PaywallScreen({
   });
 
   const handlePurchase = async () => {
-    if (purchasing) return;
-    
+    if (!packages.length) {
+      alert('No hay productos disponibles para comprar.');
+      return;
+    }
     setPurchasing(true);
     try {
-      await onPurchase(selectedOption);
-    } catch (error) {
-      console.error('Purchase failed:', error);
+      const selectedPackage = packages[0];
+      const purchaseResult = await Purchases.purchasePackage(selectedPackage);
+      console.log('✅ Compra exitosa:', purchaseResult);
+      alert('¡Compra exitosa!');
+      if (onPurchase) await onPurchase(selectedPackage.identifier);
+    } catch (error: any) {
+      if (error.userCancelled) {
+        alert('Compra cancelada por el usuario.');
+      } else {
+        alert('Error al procesar la compra. Intenta de nuevo.');
+        console.error('❌ Error en la compra:', error);
+      }
     } finally {
       setPurchasing(false);
     }
@@ -272,6 +309,26 @@ export default function PaywallScreen({
                 Try 7 days for free. Cancel anytime.
               </Text>
             </Animated.View>
+
+            {/* RevenueCat Products UI */}
+            {offeringsLoading ? (
+              <View style={{ marginVertical: 20, alignItems: 'center' }}>
+                <ActivityIndicator size="large" color="#00e676" />
+                <Text style={{ color: 'white', textAlign: 'center', marginTop: 12 }}>Cargando planes...</Text>
+              </View>
+            ) : packages.length === 0 ? (
+              <Text style={{ color: 'white', textAlign: 'center', marginVertical: 20 }}>No plans available right now.</Text>
+            ) : (
+              <View style={{ marginVertical: 20 }}>
+                {packages.map((pkg: any) => (
+                  <View key={pkg.identifier} style={{ backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 12, padding: 16, marginBottom: 12 }}>
+                    <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 18 }}>{pkg.product.title}</Text>
+                    <Text style={{ color: '#aaa', marginBottom: 4 }}>{pkg.product.description}</Text>
+                    <Text style={{ color: '#00e676', fontWeight: 'bold', fontSize: 16 }}>{pkg.product.priceString}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
 
             {/* Purchase Button */}
             <Animated.View 

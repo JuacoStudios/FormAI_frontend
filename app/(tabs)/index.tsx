@@ -52,6 +52,7 @@ export default function ScanScreen() {
     setPremiumStatus,
     hidePaywall,
     showPaywall,
+    resetPaywallState,
   } = usePaywall();
 
   // Load scan count from AsyncStorage on component mount
@@ -114,6 +115,8 @@ export default function ScanScreen() {
   // For testing: Uncomment the line below to reset scan count on app start
   // useEffect(() => { resetScanCount(); }, []);
 
+  const canScan = isPremium || scanCount < 2;
+
   if (!permission) {
     return <View />;
   }
@@ -132,6 +135,9 @@ export default function ScanScreen() {
   }
 
   const handleCapture = async () => {
+    if (!canScan || shouldShowPaywall) {
+      return;
+    }
     if (cameraRef.current && !analyzing) {
       setAnalyzing(true);
       setResult(null);
@@ -167,16 +173,8 @@ export default function ScanScreen() {
         if (!hasCompletedFirstScan) {
           await markFirstScanComplete();
         }
-        // Mostrar el paywall solo después de que el usuario vea el resultado del primer escaneo exitoso
-        if (!isPremium && newCount === 1) {
-          setTimeout(() => {
-            setShowPaywallAfterScan(true);
-            showPaywall();
-          }, 1000); // Delay para asegurar que el usuario vea el resultado antes del paywall
-        }
-        // Si el usuario no es premium y ya hizo su primer escaneo, bloquear futuros escaneos
-        if (!isPremium && newCount > 1) {
-          setShowPaywallAfterScan(true);
+        // Mostrar el paywall después del segundo escaneo exitoso si no es premium
+        if (!isPremium && newCount === 2) {
           showPaywall();
         }
       } catch (error) {
@@ -236,6 +234,8 @@ export default function ScanScreen() {
     setShowPaywallAfterScan(false);
   };
 
+  console.log('shouldShowPaywall:', shouldShowPaywall);
+
   return (
     <View style={styles.container}>
       <CameraView 
@@ -265,7 +265,8 @@ export default function ScanScreen() {
             <TouchableOpacity
               style={[styles.captureButton, analyzing && styles.capturing]}
               onPress={handleCapture}
-              disabled={analyzing}>
+              disabled={analyzing || !canScan || shouldShowPaywall}
+            >
               <CameraIcon color="white" size={32} />
             </TouchableOpacity>
           </View>
@@ -300,13 +301,22 @@ export default function ScanScreen() {
 
       {/* PaywallScreen is rendered as a full-screen modal, blocking interaction with the scanner */}
       <PaywallScreen
-        visible={shouldShowPaywall || showPaywallAfterScan}
+        visible={shouldShowPaywall}
         onClose={handleClosePaywall}
         onPurchase={handlePurchase}
         onRestore={handleRestore}
         onTerms={handleTerms}
         onPrivacy={handlePrivacy}
       />
+
+      {__DEV__ && (
+        <TouchableOpacity
+          onPress={resetPaywallState}
+          style={{position: 'absolute', top: 10, left: 10, backgroundColor: 'red', padding: 10, zIndex: 9999, borderRadius: 8}}
+        >
+          <Text style={{color: 'white', fontWeight: 'bold'}}>Reset Paywall State</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 }

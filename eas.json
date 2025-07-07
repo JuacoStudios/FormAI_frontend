@@ -9,7 +9,8 @@
         "distribution": "internal",
         "env": {
           "EXPO_PUBLIC_API_BASE_URL": "http://localhost:8080/api",
-          "EXPO_ANDROID_KOTLIN_VERSION": "1.9.25"
+          "EXPO_ANDROID_KOTLIN_VERSION": "1.9.25",
+          "EXPO_TARGET_ANDROID_SDK_VERSION": "35"
         }
       }
     },
@@ -18,7 +19,8 @@
         "distribution": "internal",
         "env": {
           "EXPO_PUBLIC_API_BASE_URL": "https://formai-backend-dc3u.onrender.com/api",
-          "EXPO_ANDROID_KOTLIN_VERSION": "1.9.25"
+          "EXPO_ANDROID_KOTLIN_VERSION": "1.9.25",
+          "EXPO_TARGET_ANDROID_SDK_VERSION": "35"
         }
       }
     },
@@ -27,7 +29,8 @@
         "buildType": "app-bundle",
         "env": {
           "EXPO_PUBLIC_API_BASE_URL": "https://formai-backend-dc3u.onrender.com/api",
-          "EXPO_ANDROID_KOTLIN_VERSION": "1.9.25"
+          "EXPO_ANDROID_KOTLIN_VERSION": "1.9.25",
+          "EXPO_TARGET_ANDROID_SDK_VERSION": "35"
         }
       }
     }
