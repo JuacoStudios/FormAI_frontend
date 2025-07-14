@@ -11,6 +11,7 @@ import { Linking } from 'react-native';
 
 // Storage key for tracking scan attempts
 const SCAN_COUNT_KEY = 'scanAttemptCount';
+const SCAN_HISTORY_KEY = 'scanHistory'; // NUEVO: clave para historial
 
 // Helper function to convert base64 to Blob
 const base64ToBlob = (base64: string, mimeType: string = 'image/jpeg'): Blob => {
@@ -110,6 +111,21 @@ export default function ScanScreen() {
     } catch (error) {
       console.error('Error checking scan count:', error);
       return 0;
+    }
+  };
+
+  // Guardar escaneo en historial
+  const saveScanToHistory = async (machineName: string, imageUri: string, result: string) => {
+    try {
+      const timestamp = Date.now();
+      const newScan = { id: timestamp, machineName, imageUri, result, timestamp };
+      const historyRaw = await AsyncStorage.getItem(SCAN_HISTORY_KEY);
+      let history = historyRaw ? JSON.parse(historyRaw) : [];
+      history.unshift(newScan); // Agrega al inicio
+      if (history.length > 20) history = history.slice(0, 20); // Limita a 20
+      await AsyncStorage.setItem(SCAN_HISTORY_KEY, JSON.stringify(history));
+    } catch (error) {
+      console.error('Error guardando historial de escaneos:', error);
     }
   };
 
@@ -243,6 +259,13 @@ export default function ScanScreen() {
       if (!hasCompletedFirstScan) {
         await markFirstScanComplete();
       }
+
+      // Guardar en historial (usa la URI local de la foto y el resultado)
+      await saveScanToHistory(
+        data.machineName || 'Desconocida',
+        photo.uri,
+        data.message
+      );
       
       // Mostrar el paywall después del segundo escaneo exitoso si no es premium
       if (!isPremium && newCount === 2) {
