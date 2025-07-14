@@ -25,6 +25,7 @@ import Animated, {
   ZoomIn,
 } from 'react-native-reanimated';
 import Purchases from 'react-native-purchases';
+import { fetchRevenueCatOfferings } from '../services/revenuecatApi';
 
 const { width, height } = Dimensions.get('window');
 
@@ -121,25 +122,17 @@ export default function PaywallScreen({
   }, [visible]);
 
   useEffect(() => {
-    async function fetchOfferings() {
-      setOfferingsLoading(true);
+    async function loadOfferings() {
       try {
-        const result = await Purchases.getOfferings();
-        setOfferings(result);
-        if (result && result.current && result.current.availablePackages) {
-          setPackages(result.current.availablePackages);
-        } else {
-          setPackages([]);
-        }
-        console.log('RevenueCat offerings:', result);
-      } catch (error) {
-        setPackages([]);
-        console.error('Error fetching RevenueCat offerings:', error);
+        const data = await fetchRevenueCatOfferings();
+        setOfferings(data);
+      } catch (err) {
+        setOfferings(null);
       } finally {
         setOfferingsLoading(false);
       }
     }
-    fetchOfferings();
+    loadOfferings();
   }, []);
 
   const animatedPulseStyle = useAnimatedStyle(() => {
@@ -316,11 +309,11 @@ export default function PaywallScreen({
                 <ActivityIndicator size="large" color="#00e676" />
                 <Text style={{ color: 'white', textAlign: 'center', marginTop: 12 }}>Cargando planes...</Text>
               </View>
-            ) : packages.length === 0 ? (
+            ) : offerings === null ? (
               <Text style={{ color: 'white', textAlign: 'center', marginVertical: 20 }}>No plans available right now.</Text>
             ) : (
               <View style={{ marginVertical: 20 }}>
-                {packages.map((pkg: any) => (
+                {offerings.map((pkg: any) => (
                   <View key={pkg.identifier} style={{ backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 12, padding: 16, marginBottom: 12 }}>
                     <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 18 }}>{pkg.product.title}</Text>
                     <Text style={{ color: '#aaa', marginBottom: 4 }}>{pkg.product.description}</Text>

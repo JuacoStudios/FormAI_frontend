@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View, Animated, Easing } from 'react-native';
 import { CameraView, CameraType, useCameraPermissions, Camera } from 'expo-camera';
 import { Camera as CameraIcon, Camera as FlipCamera } from 'lucide-react-native';
 import { BlurView } from 'expo-blur';
@@ -43,6 +43,7 @@ export default function ScanScreen() {
   const [scanCount, setScanCount] = useState<number>(0);
   const [showPaywallAfterScan, setShowPaywallAfterScan] = useState<boolean>(false);
   const cameraRef = useRef<CameraView>(null);
+  const [buttonScale] = useState(new Animated.Value(1));
   
   const {
     shouldShowPaywall,
@@ -134,55 +135,126 @@ export default function ScanScreen() {
     );
   }
 
+  // Animación de feedback visual para el botón de captura
+  const triggerButtonPulse = () => {
+    Animated.sequence([
+      Animated.timing(buttonScale, {
+        toValue: 0.95,
+        duration: 80,
+        useNativeDriver: true,
+        easing: Easing.out(Easing.ease),
+      }),
+      Animated.timing(buttonScale, {
+        toValue: 1,
+        duration: 120,
+        useNativeDriver: true,
+        easing: Easing.out(Easing.ease),
+      }),
+    ]).start();
+  };
+
   const handleCapture = async () => {
-    if (!canScan || shouldShowPaywall) {
+    console.log('handleCapture started');
+    console.log('Estado actual:', { analyzing, canScan, shouldShowPaywall });
+    
+    // Feedback visual inmediato
+    triggerButtonPulse();
+    
+    // Verificar condiciones
+    if (!canScan) {
+      console.log('❌ No puede escanear - canScan:', canScan);
       return;
     }
-    if (cameraRef.current && !analyzing) {
-      setAnalyzing(true);
-      setResult(null);
-      try {
-        const photo = await cameraRef.current?.takePictureAsync({
-          base64: true,
-          quality: 0.7,
-          exif: false,
-          skipProcessing: true
-        });
-        if (!photo?.base64) {
-          throw new Error('No se pudo capturar la imagen');
-        }
-        const blob = base64ToBlob(photo.base64, 'image/jpeg');
-        const formData = new FormData();
-        formData.append('image', blob, 'equipment.jpg');
-        const requestUrl = `${config.backend.apiBaseUrl}/analyze`;
-        const response = await fetch(requestUrl, {
-          method: 'POST',
-          body: formData,
-        });
-        const responseText = await response.text();
-        if (!response.ok) {
-          throw new Error(`Error en el backend: ${response.status} - ${responseText}`);
-        }
-        const data = JSON.parse(responseText);
-        if (!data.success || !data.message) {
-          throw new Error('La respuesta del backend no tiene el formato esperado');
-        }
-        setResult(data.message);
-        // Incrementar el contador solo después de un escaneo exitoso
-        const newCount = await incrementScanCount();
-        if (!hasCompletedFirstScan) {
-          await markFirstScanComplete();
-        }
-        // Mostrar el paywall después del segundo escaneo exitoso si no es premium
-        if (!isPremium && newCount === 2) {
-          showPaywall();
-        }
-      } catch (error) {
-        console.error('Error completo:', error);
-        setResult(error instanceof Error ? error.message : 'Error al analizar la imagen. Por favor, intenta de nuevo.');
-      } finally {
-        setAnalyzing(false);
+    
+    if (shouldShowPaywall) {
+      console.log('❌ Paywall activo - shouldShowPaywall:', shouldShowPaywall);
+      return;
+    }
+    
+    if (analyzing) {
+      console.log('❌ Ya está analizando - analyzing:', analyzing);
+      return;
+    }
+    
+    if (!cameraRef.current) {
+      console.log('❌ No hay referencia a la cámara');
+      return;
+    }
+    
+    console.log('✅ Todas las condiciones pasaron, iniciando captura...');
+    
+    setAnalyzing(true);
+    setResult(null);
+    
+    try {
+      console.log('cameraRef.current:', cameraRef.current);
+      if (!cameraRef.current) {
+        console.warn('cameraRef.current es null, la cámara no está lista');
+        return;
       }
+      console.log('📸 Capturando imagen...');
+      const photo = await cameraRef.current.takePictureAsync({
+        base64: true,
+        quality: 0.7,
+        exif: false,
+        skipProcessing: true
+      });
+      
+      if (!photo?.base64) {
+        throw new Error('No se pudo capturar la imagen');
+      }
+      
+      console.log('✅ Imagen capturada, preparando para API...');
+      
+      // Prepara la imagen para el backend
+      const blob = base64ToBlob(photo.base64, 'image/jpeg');
+      const formData = new FormData();
+      formData.append('image', blob, 'equipment.jpg');
+      
+      const requestUrl = `${config.backend.apiBaseUrl}/analyze`;
+      console.log('🌐 Enviando a:', requestUrl);
+      
+      // Llama a la API y espera la respuesta
+      const response = await fetch(requestUrl, {
+        method: 'POST',
+        body: formData,
+      });
+      
+      const responseText = await response.text();
+      console.log('📡 Respuesta del servidor:', response.status, responseText);
+      
+      if (!response.ok) {
+        throw new Error(`Error en el backend: ${response.status} - ${responseText}`);
+      }
+      
+      const data = JSON.parse(responseText);
+      console.log('✅ API Success:', data);
+      
+      if (!data.success || !data.message) {
+        throw new Error('La respuesta del backend no tiene el formato esperado');
+      }
+      
+      // Muestra el resultado en pantalla
+      setResult(data.message);
+      console.log('📱 Resultado mostrado en UI:', data.message);
+      
+      // Incrementar el contador solo después de un escaneo exitoso
+      const newCount = await incrementScanCount();
+      if (!hasCompletedFirstScan) {
+        await markFirstScanComplete();
+      }
+      
+      // Mostrar el paywall después del segundo escaneo exitoso si no es premium
+      if (!isPremium && newCount === 2) {
+        showPaywall();
+      }
+      
+    } catch (error) {
+      console.error('❌ Error completo:', error);
+      setResult(error instanceof Error ? error.message : 'Error al analizar la imagen. Por favor, intenta de nuevo.');
+    } finally {
+      setAnalyzing(false);
+      console.log('🏁 Análisis completado');
     }
   };
 
@@ -262,12 +334,11 @@ export default function ScanScreen() {
               <FlipCamera color="white" size={24} />
             </TouchableOpacity>
             
+            {/* Botón de reset de escaneos */}
             <TouchableOpacity
-              style={[styles.captureButton, analyzing && styles.capturing]}
-              onPress={handleCapture}
-              disabled={analyzing || !canScan || shouldShowPaywall}
-            >
-              <CameraIcon color="white" size={32} />
+              style={styles.resetButton}
+              onPress={resetScanCount}>
+              <Text style={styles.resetButtonText}>Reset Escaneos</Text>
             </TouchableOpacity>
           </View>
 
@@ -299,6 +370,26 @@ export default function ScanScreen() {
         </View>
       </CameraView>
 
+      {/* Botón de captura fuera del CameraView */}
+      <TouchableOpacity
+        style={[
+          styles.captureButton,
+          analyzing && styles.capturing,
+          {
+            position: 'absolute',
+            bottom: 40,
+            alignSelf: 'center',
+            zIndex: 1000,
+            elevation: 1000,
+          }
+        ]}
+        onPress={handleCapture}
+        // disabled={analyzing || !canScan || shouldShowPaywall} // Deshabilitado temporalmente para debug
+        activeOpacity={0.7}
+      >
+        <CameraIcon color="white" size={32} />
+      </TouchableOpacity>
+
       {/* PaywallScreen is rendered as a full-screen modal, blocking interaction with the scanner */}
       <PaywallScreen
         visible={shouldShowPaywall}
@@ -308,15 +399,6 @@ export default function ScanScreen() {
         onTerms={handleTerms}
         onPrivacy={handlePrivacy}
       />
-
-      {__DEV__ && (
-        <TouchableOpacity
-          onPress={resetPaywallState}
-          style={{position: 'absolute', top: 10, left: 10, backgroundColor: 'red', padding: 10, zIndex: 9999, borderRadius: 8}}
-        >
-          <Text style={{color: 'white', fontWeight: 'bold'}}>Reset Paywall State</Text>
-        </TouchableOpacity>
-      )}
     </View>
   );
 }
@@ -426,5 +508,20 @@ const styles = StyleSheet.create({
     color: 'black',
     fontSize: 12,
     fontWeight: '700',
+  },
+  resetButton: {
+    position: 'absolute',
+    right: 20,
+    backgroundColor: 'rgba(255, 0, 0, 0.8)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  resetButtonText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: '600',
   },
 });
