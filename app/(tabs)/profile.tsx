@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, Switch, TextInput, ScrollView } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Settings as SettingsIcon, Target, LineChart } from 'lucide-react-native';
+import GoalProgressDashboard from '../../components/GoalProgressDashboard';
 
 type TabKey = 'settings' | 'goals' | 'progress';
 
@@ -62,6 +63,16 @@ function SettingsTab() {
 
 function GoalsTab() {
   const [goalsText, setGoalsText] = useState('Build consistency: 20 workouts this month');
+  const [currentWorkouts, setCurrentWorkouts] = useState(12);
+  const [targetWorkouts, setTargetWorkouts] = useState(20);
+
+  // Mock history data for the line graph
+  const workoutHistory = [
+    { date: '2025-08-01', value: 2 },
+    { date: '2025-08-05', value: 4 },
+    { date: '2025-08-10', value: 7 },
+    { date: '2025-08-12', value: 12 }
+  ];
 
   useEffect(() => {
     (async () => {
@@ -76,6 +87,15 @@ function GoalsTab() {
 
   return (
     <View style={styles.tabContent}>
+      {/* Futuristic Progress Dashboard */}
+      <GoalProgressDashboard
+        goalTitle={goalsText}
+        currentValue={currentWorkouts}
+        targetValue={targetWorkouts}
+        historyData={workoutHistory}
+      />
+      
+      {/* Goal Input Section */}
       <Text style={styles.itemLabel}>Your goal</Text>
       <TextInput
         value={goalsText}
@@ -86,6 +106,47 @@ function GoalsTab() {
         multiline
       />
       <Text style={styles.hint}>Tip: Keep it measurable and time-bound.</Text>
+      
+      {/* Quick Stats Controls */}
+      <View style={styles.quickStatsContainer}>
+        <View style={styles.statControl}>
+          <Text style={styles.statControlLabel}>Current Workouts</Text>
+          <View style={styles.statControlButtons}>
+            <TouchableOpacity 
+              style={styles.statButton} 
+              onPress={() => setCurrentWorkouts(Math.max(0, currentWorkouts - 1))}
+            >
+              <Text style={styles.statButtonText}>-</Text>
+            </TouchableOpacity>
+            <Text style={styles.statButtonValue}>{currentWorkouts}</Text>
+            <TouchableOpacity 
+              style={styles.statButton} 
+              onPress={() => setCurrentWorkouts(currentWorkouts + 1)}
+            >
+              <Text style={styles.statButtonText}>+</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+        
+        <View style={styles.statControl}>
+          <Text style={styles.statControlLabel}>Target Workouts</Text>
+          <View style={styles.statControlButtons}>
+            <TouchableOpacity 
+              style={styles.statButton} 
+              onPress={() => setTargetWorkouts(Math.max(1, targetWorkouts - 1))}
+            >
+              <Text style={styles.statButtonText}>-</Text>
+            </TouchableOpacity>
+            <Text style={styles.statButtonValue}>{targetWorkouts}</Text>
+            <TouchableOpacity 
+              style={styles.statButton} 
+              onPress={() => setTargetWorkouts(targetWorkouts + 1)}
+            >
+              <Text style={styles.statButtonText}>+</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
     </View>
   );
 }
@@ -285,5 +346,43 @@ const styles = StyleSheet.create({
   counterButtonText: {
     color: 'white',
     fontWeight: '700',
+  },
+  quickStatsContainer: {
+    marginTop: 20,
+    gap: 16,
+  },
+  statControl: {
+    alignItems: 'center',
+  },
+  statControlLabel: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  statControlButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  statButton: {
+    backgroundColor: '#00e676',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statButtonText: {
+    color: 'black',
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  statButtonValue: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: '600',
+    minWidth: 30,
+    textAlign: 'center',
   },
 });
