@@ -224,8 +224,13 @@ export default function ScanScreen() {
       
       // Prepara la imagen para el backend
       const blob = base64ToBlob(photo.base64, 'image/jpeg');
+      console.log('📦 Blob creado:', blob.size, 'bytes');
+      
       const formData = new FormData();
       formData.append('image', blob, 'equipment.jpg');
+      
+      // Debug: verificar FormData
+      console.log('📋 FormData creado con imagen de', blob.size, 'bytes');
       
       const requestUrl = `${config.backend.apiBaseUrl}/analyze`;
       console.log('🌐 Enviando a:', requestUrl);
@@ -234,17 +239,28 @@ export default function ScanScreen() {
       const response = await fetch(requestUrl, {
         method: 'POST',
         body: formData,
+        headers: {
+          'Accept': 'application/json',
+        },
       });
       
       const responseText = await response.text();
       console.log('📡 Respuesta del servidor:', response.status, responseText);
+      console.log('📡 Headers de respuesta:', Object.fromEntries(response.headers.entries()));
       
       if (!response.ok) {
+        console.error('❌ Error HTTP:', response.status, response.statusText);
         throw new Error(`Error en el backend: ${response.status} - ${responseText}`);
       }
       
-      const data = JSON.parse(responseText);
-      console.log('✅ API Success:', data);
+      let data;
+      try {
+        data = JSON.parse(responseText);
+        console.log('✅ API Success:', data);
+      } catch (parseError) {
+        console.error('❌ Error parsing JSON:', parseError);
+        throw new Error('Respuesta del servidor no es JSON válido');
+      }
       
       if (!data.success || !data.message) {
         throw new Error('La respuesta del backend no tiene el formato esperado');
@@ -274,6 +290,7 @@ export default function ScanScreen() {
       
     } catch (error) {
       console.error('❌ Error completo:', error);
+      console.error('❌ Stack trace:', error instanceof Error ? error.stack : 'No stack trace');
       setResult(error instanceof Error ? error.message : 'Error al analizar la imagen. Por favor, intenta de nuevo.');
     } finally {
       setAnalyzing(false);
@@ -317,11 +334,11 @@ export default function ScanScreen() {
   };
 
   const handleTerms = () => {
-    Linking.openURL('https://your-app.com/terms');
+    Linking.openURL('https://stoicdrop.com/terms-conditions');
   };
 
   const handlePrivacy = () => {
-    Linking.openURL('https://your-app.com/privacy');
+    Linking.openURL('https://stoicdrop.com/privacy-policy');
   };
 
   const handleClosePaywall = () => {

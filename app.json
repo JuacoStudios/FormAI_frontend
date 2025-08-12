@@ -2,7 +2,7 @@
   "expo": {
     "name": "Bolt Expo App",
     "slug": "bolt-expo-app",
-    "version": "1.0.7",                             
+    "version": "1.0.10",                             
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "myapp",
@@ -24,8 +24,7 @@
         "backgroundColor": "#ffffff"
       },
       "package": "com.yourcompany.formai",
-      "versionCode": 7,
-      "targetSdkVersion": 35                             
+      "versionCode": 11                            
     },
     "web": {
       "bundler": "metro",
