@@ -4,6 +4,7 @@ import { CameraView, CameraType, useCameraPermissions, Camera } from 'expo-camer
 import { Camera as CameraIcon, Camera as FlipCamera } from 'lucide-react-native';
 import { BlurView } from 'expo-blur';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useRouter } from 'expo-router';
 import { config } from '../config';
 import { usePaywall } from '@/hooks/usePaywall';
 import PaywallScreen from '@/components/PaywallScreen';
@@ -37,6 +38,7 @@ const base64ToBlob = (base64: string, mimeType: string = 'image/jpeg'): Blob => 
 };
 
 export default function ScanScreen() {
+  const router = useRouter();
   const [facing, setFacing] = useState<CameraType>('back');
   const [permission, requestPermission] = useCameraPermissions();
   const [analyzing, setAnalyzing] = useState(false);
@@ -60,7 +62,20 @@ export default function ScanScreen() {
   // Load scan count from AsyncStorage on component mount
   useEffect(() => {
     loadScanCount();
+    checkDiagnosticCompletion();
   }, []);
+
+  // Check if diagnostic wizard has been completed
+  const checkDiagnosticCompletion = async () => {
+    try {
+      const completed = await AsyncStorage.getItem('diagnosticCompleted');
+      if (completed !== 'true') {
+        router.replace('../diagnostic');
+      }
+    } catch (error) {
+      console.error('Error checking diagnostic completion:', error);
+    }
+  };
 
   // Load the current scan count from persistent storage
   const loadScanCount = async () => {
