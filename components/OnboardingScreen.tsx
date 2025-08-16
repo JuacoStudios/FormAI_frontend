@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Animated } from 'react-native';
 import { useOnboarding } from '@/hooks/useOnboarding';
+import { useRouter } from 'expo-router';
 import { colors } from '@/theme/colors';
 import OnboardingSelectableCard from './OnboardingSelectableCard';
 import OnboardingTest from './OnboardingTest';
@@ -15,7 +16,9 @@ export default function OnboardingScreen() {
     nextStep,
     previousStep,
     updateAnswer,
+    complete,
   } = useOnboarding();
+  const router = useRouter();
 
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const slideAnim = useRef(new Animated.Value(0)).current;
@@ -57,8 +60,16 @@ export default function OnboardingScreen() {
     updateAnswer(currentQuestion.id as any, option);
   };
 
-  const handleContinue = () => {
-    if (canContinue()) {
+  const handleContinue = async () => {
+    if (!canContinue()) {
+      return;
+    }
+
+    if (isLastStep()) {
+      console.debug('[Onboarding] Last step. Calling complete().');
+      await complete();
+      // The root layout will handle the navigation
+    } else {
       nextStep();
     }
   };
@@ -138,8 +149,6 @@ export default function OnboardingScreen() {
         </Text>
       </TouchableOpacity>
 
-      {/* Test Panel - Remove in production */}
-      <OnboardingTest />
     </View>
   );
 }

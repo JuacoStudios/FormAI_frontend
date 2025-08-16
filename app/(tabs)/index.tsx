@@ -61,21 +61,9 @@ export default function ScanScreen() {
 
   // Load scan count from AsyncStorage on component mount
   useEffect(() => {
+    console.debug('scan: mounted');
     loadScanCount();
-    checkDiagnosticCompletion();
   }, []);
-
-  // Check if diagnostic wizard has been completed
-  const checkDiagnosticCompletion = async () => {
-    try {
-      const completed = await AsyncStorage.getItem('diagnosticCompleted');
-      if (completed !== 'true') {
-        router.replace('../diagnostic');
-      }
-    } catch (error) {
-      console.error('Error checking diagnostic completion:', error);
-    }
-  };
 
   // Load the current scan count from persistent storage
   const loadScanCount = async () => {

@@ -1,4 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useRouter } from 'expo-router';
 
 export interface OnboardingData {
   mainGoal: string;
@@ -9,7 +11,13 @@ export interface OnboardingData {
   fitnessApps: string;
 }
 
-export const ONBOARDING_STEPS = [
+interface OnboardingStep {
+  id: keyof OnboardingData;
+  title: string;
+  options: string[];
+}
+
+export const ONBOARDING_STEPS: OnboardingStep[] = [
   {
     id: 'mainGoal',
     title: 'What is your main goal at the gym?',
@@ -42,17 +50,42 @@ export const ONBOARDING_STEPS = [
   }
 ];
 
+const ONBOARDING_COMPLETED_KEY = 'onboardingCompleted';
+
 export function useOnboarding() {
   const [currentStep, setCurrentStep] = useState(0);
   const [answers, setAnswers] = useState<Partial<OnboardingData>>({});
+  const [loading, setLoading] = useState(true);
+  const [completed, setCompleted] = useState(false);
+  const router = useRouter();
+
+  useEffect(() => {
+    const checkOnboardingStatus = async () => {
+      try {
+        const value = await AsyncStorage.getItem(ONBOARDING_COMPLETED_KEY);
+        setCompleted(value === '1');
+      } catch (e) {
+        console.error('Failed to load onboarding status', e);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    checkOnboardingStatus();
+  }, []);
+
+  const complete = async () => {
+    try {
+      await AsyncStorage.setItem(ONBOARDING_COMPLETED_KEY, '1');
+      setCompleted(true);
+    } catch (e) {
+      console.error('Failed to save onboarding status', e);
+    }
+  };
 
   const nextStep = () => {
     if (currentStep < ONBOARDING_STEPS.length - 1) {
       setCurrentStep(currentStep + 1);
-    } else {
-      // Onboarding completed - navigate to main app
-      console.log('Onboarding completed with answers:', answers);
-      // Here you would typically navigate to the main app
     }
   };
 
@@ -63,7 +96,7 @@ export function useOnboarding() {
   };
 
   const updateAnswer = (questionId: keyof OnboardingData, answer: string) => {
-    setAnswers(prev => ({ ...prev, [questionId]: answer }));
+    setAnswers((prev: Partial<OnboardingData>) => ({ ...prev, [questionId]: answer }));
   };
 
   const getCurrentQuestion = () => ONBOARDING_STEPS[currentStep];
@@ -74,6 +107,8 @@ export function useOnboarding() {
   return {
     currentStep,
     answers,
+    loading,
+    completed,
     getCurrentQuestion,
     getCurrentAnswer,
     canContinue,
@@ -81,5 +116,6 @@ export function useOnboarding() {
     nextStep,
     previousStep,
     updateAnswer,
+    complete,
   };
 }
