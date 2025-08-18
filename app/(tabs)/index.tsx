@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View, Animated, Easing } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View, Animated, Easing, Modal } from 'react-native';
 import { CameraView, CameraType, useCameraPermissions, Camera } from 'expo-camera';
 import { Camera as CameraIcon, Camera as FlipCamera } from 'lucide-react-native';
 import { BlurView } from 'expo-blur';
@@ -48,6 +48,11 @@ export default function ScanScreen() {
   const cameraRef = useRef<CameraView>(null);
   const [buttonScale] = useState(new Animated.Value(1));
   
+  // Welcome modal states
+  const [showWelcomeModal, setShowWelcomeModal] = useState(false);
+  const [modalOpacity] = useState(new Animated.Value(0));
+  const [modalScale] = useState(new Animated.Value(0.8));
+  
   const {
     shouldShowPaywall,
     isPremium,
@@ -63,7 +68,70 @@ export default function ScanScreen() {
   useEffect(() => {
     loadScanCount();
     checkDiagnosticCompletion();
+    checkFirstTimeUser();
   }, []);
+
+  // Check if this is the first time the user opens the app
+  const checkFirstTimeUser = async () => {
+    try {
+      const hasSeenWelcome = await AsyncStorage.getItem('hasSeenWelcome');
+      if (!hasSeenWelcome) {
+        // Small delay to ensure camera is ready
+        setTimeout(() => {
+          setShowWelcomeModal(true);
+          showWelcomeAnimation();
+        }, 500);
+      }
+    } catch (error) {
+      console.error('Error checking first time user:', error);
+    }
+  };
+
+  // Welcome modal animation
+  const showWelcomeAnimation = () => {
+    Animated.parallel([
+      Animated.timing(modalOpacity, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+        easing: Easing.out(Easing.ease),
+      }),
+      Animated.timing(modalScale, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+        easing: Easing.out(Easing.back(1.1)),
+      }),
+    ]).start();
+  };
+
+  const hideWelcomeModal = async () => {
+    try {
+      // Mark as seen in storage
+      await AsyncStorage.setItem('hasSeenWelcome', 'true');
+      
+      // Animate out
+      Animated.parallel([
+        Animated.timing(modalOpacity, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true,
+          easing: Easing.in(Easing.ease),
+        }),
+        Animated.timing(modalScale, {
+          toValue: 0.8,
+          duration: 200,
+          useNativeDriver: true,
+          easing: Easing.in(Easing.ease),
+        }),
+      ]).start(() => {
+        setShowWelcomeModal(false);
+      });
+    } catch (error) {
+      console.error('Error hiding welcome modal:', error);
+      setShowWelcomeModal(false);
+    }
+  };
 
   // Check if diagnostic wizard has been completed
   const checkDiagnosticCompletion = async () => {
@@ -445,6 +513,49 @@ export default function ScanScreen() {
         <CameraIcon color="white" size={32} />
       </TouchableOpacity>
 
+      {/* Welcome Modal - shows only on first app launch */}
+      <Modal
+        visible={showWelcomeModal}
+        transparent
+        animationType="none"
+        statusBarTranslucent
+      >
+        <View style={styles.welcomeModalContainer}>
+          <Animated.View 
+            style={[
+              styles.welcomeModalContent,
+              {
+                opacity: modalOpacity,
+                transform: [{ scale: modalScale }],
+              }
+            ]}
+          >
+            <Text style={styles.welcomeTitle}>Welcome!</Text>
+            <View style={styles.welcomeInstructions}>
+              <View style={styles.instructionRow}>
+                <Text style={styles.instructionEmoji}>👉</Text>
+                <Text style={styles.instructionText}>Get close to the machine</Text>
+              </View>
+              <View style={styles.instructionRow}>
+                <Text style={styles.instructionEmoji}>📸</Text>
+                <Text style={styles.instructionText}>Take a photo</Text>
+              </View>
+              <View style={styles.instructionRow}>
+                <Text style={styles.instructionEmoji}>⏳</Text>
+                <Text style={styles.instructionText}>Wait a few seconds</Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              style={styles.welcomeCloseButton}
+              onPress={hideWelcomeModal}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.welcomeCloseButtonText}>Got it!</Text>
+            </TouchableOpacity>
+          </Animated.View>
+        </View>
+      </Modal>
+
       {/* PaywallScreen is rendered as a full-screen modal, blocking interaction with the scanner */}
       <PaywallScreen
         visible={shouldShowPaywall}
@@ -578,5 +689,79 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 12,
     fontWeight: '600',
+  },
+  // Welcome Modal Styles
+  welcomeModalContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 30,
+  },
+  welcomeModalContent: {
+    backgroundColor: 'white',
+    borderRadius: 20,
+    padding: 30,
+    alignItems: 'center',
+    maxWidth: 320,
+    width: '100%',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 10,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  welcomeTitle: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#1a1a1a',
+    marginBottom: 25,
+    textAlign: 'center',
+  },
+  welcomeInstructions: {
+    width: '100%',
+    marginBottom: 30,
+  },
+  instructionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+    paddingHorizontal: 8,
+  },
+  instructionEmoji: {
+    fontSize: 22,
+    marginRight: 15,
+    width: 30,
+    textAlign: 'center',
+  },
+  instructionText: {
+    fontSize: 16,
+    color: '#4a4a4a',
+    fontWeight: '500',
+    flex: 1,
+    lineHeight: 22,
+  },
+  welcomeCloseButton: {
+    backgroundColor: '#00e676',
+    paddingHorizontal: 35,
+    paddingVertical: 15,
+    borderRadius: 25,
+    shadowColor: '#00e676',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  welcomeCloseButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '700',
+    textAlign: 'center',
   },
 });
