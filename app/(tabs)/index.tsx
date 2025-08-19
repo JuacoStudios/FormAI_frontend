@@ -66,6 +66,7 @@ export default function ScanScreen() {
 
   // Load scan count from AsyncStorage on component mount
   useEffect(() => {
+    console.debug('scan: mounted');
     loadScanCount();
     checkDiagnosticCompletion();
     checkFirstTimeUser();
@@ -139,6 +140,13 @@ export default function ScanScreen() {
       const completed = await AsyncStorage.getItem('diagnosticCompleted');
       if (completed !== 'true') {
         router.replace('../diagnostic');
+        return;
+      }
+      
+      // Check if onboarding has been completed
+      const onboardingCompleted = await AsyncStorage.getItem('onboardingCompleted');
+      if (onboardingCompleted !== 'true') {
+        router.replace('../onboarding');
       }
     } catch (error) {
       console.error('Error checking diagnostic completion:', error);

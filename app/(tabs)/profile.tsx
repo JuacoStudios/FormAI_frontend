@@ -3,6 +3,7 @@ import { StyleSheet, Text, View, TouchableOpacity, Switch, TextInput, ScrollView
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Settings as SettingsIcon, Target, LineChart } from 'lucide-react-native';
 import GoalProgressDashboard from '../../components/GoalProgressDashboard';
+import { colors } from '../../theme/colors';
 
 type TabKey = 'settings' | 'goals' | 'progress';
 
@@ -19,6 +20,7 @@ function ProgressBar({ progress }: { progress: number }) {
   return (
     <View style={styles.progressBarContainer}>
       <View style={[styles.progressBarFill, { width: `${pct * 100}%` }]} />
+      <View style={styles.progressBarGlow} />
     </View>
   );
 }
@@ -178,21 +180,37 @@ function ProgressTab() {
 
   return (
     <View style={styles.tabContent}>
-      <Text style={styles.itemLabel}>Monthly Progress</Text>
+      <Text style={styles.progressTitle}>Monthly Progress</Text>
       <ProgressBar progress={progress} />
       <Text style={styles.progressText}>{completed}/{target} workouts completed</Text>
 
-      <View style={[styles.rowBetween, { marginTop: 16 }]}>
-        <TouchableOpacity style={styles.counterButton} onPress={() => setCompleted(Math.max(0, completed - 1))}>
+      <View style={styles.counterButtonsContainer}>
+        <TouchableOpacity 
+          style={styles.counterButton} 
+          onPress={() => setCompleted(Math.max(0, completed - 1))}
+          activeOpacity={0.7}
+        >
           <Text style={styles.counterButtonText}>-1</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.counterButton} onPress={() => setCompleted(completed + 1)}>
+        <TouchableOpacity 
+          style={styles.counterButton} 
+          onPress={() => setCompleted(completed + 1)}
+          activeOpacity={0.7}
+        >
           <Text style={styles.counterButtonText}>+1</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.counterButton} onPress={() => setTarget(Math.max(1, target - 1))}>
+        <TouchableOpacity 
+          style={styles.counterButton} 
+          onPress={() => setTarget(Math.max(1, target - 1))}
+          activeOpacity={0.7}
+        >
           <Text style={styles.counterButtonText}>Target -1</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.counterButton} onPress={() => setTarget(target + 1)}>
+        <TouchableOpacity 
+          style={styles.counterButton} 
+          onPress={() => setTarget(target + 1)}
+          activeOpacity={0.7}
+        >
           <Text style={styles.counterButtonText}>Target +1</Text>
         </TouchableOpacity>
       </View>
@@ -288,10 +306,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   tabContent: {
-    backgroundColor: '#121212',
-    borderRadius: 12,
-    padding: 16,
-    gap: 14,
+    backgroundColor: colors.neonDarkerBg,
+    borderRadius: 16,
+    padding: 24,
+    gap: 20,
+    borderWidth: 1,
+    borderColor: colors.neonGreenBorder,
   },
   rowBetween: {
     flexDirection: 'row',
@@ -321,31 +341,90 @@ const styles = StyleSheet.create({
     color: '#888',
   },
   progressBarContainer: {
-    height: 14,
-    borderRadius: 10,
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    height: 16,
+    borderRadius: 12,
+    backgroundColor: colors.neonGrayBg,
     overflow: 'hidden',
+    position: 'relative',
+    borderWidth: 1,
+    borderColor: colors.neonGreenBorder,
   },
   progressBarFill: {
     height: '100%',
-    backgroundColor: '#00e676',
+    backgroundColor: colors.neonGreen,
+    borderRadius: 12,
+    shadowColor: colors.neonGreen,
+    shadowOffset: colors.neonShadowOffset,
+    shadowOpacity: colors.neonShadowOpacity,
+    shadowRadius: colors.neonShadowRadius,
+    elevation: 8,
+  },
+  progressBarGlow: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: 12,
+    backgroundColor: 'transparent',
+    shadowColor: colors.neonGreen,
+    shadowOffset: colors.neonShadowOffset,
+    shadowOpacity: colors.neonGlowOpacity,
+    shadowRadius: colors.neonGlowRadius,
+    elevation: 12,
+  },
+  progressTitle: {
+    color: colors.white,
+    fontSize: 20,
+    fontWeight: '700',
+    marginBottom: 16,
+    textAlign: 'center',
+    textShadowColor: colors.neonGreen,
+    textShadowOffset: colors.neonShadowOffset,
+    textShadowRadius: 4,
   },
   progressText: {
-    color: 'white',
-    marginTop: 8,
+    color: colors.white,
+    marginTop: 12,
     fontWeight: '600',
+    fontSize: 16,
+    textAlign: 'center',
+    textShadowColor: colors.neonGreen,
+    textShadowOffset: colors.neonShadowOffset,
+    textShadowRadius: 2,
+  },
+  counterButtonsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 24,
+    gap: 16,
+    paddingHorizontal: 4,
   },
   counterButton: {
-    backgroundColor: '#222',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: colors.neonDarkBg,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: colors.neonGreen,
+    shadowColor: colors.neonGreen,
+    shadowOffset: colors.neonShadowOffset,
+    shadowOpacity: 0.6,
+    shadowRadius: colors.neonShadowRadius,
+    elevation: 8,
+    minWidth: 80,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   counterButtonText: {
-    color: 'white',
+    color: colors.neonGreen,
     fontWeight: '700',
+    fontSize: 14,
+    textShadowColor: colors.neonGreen,
+    textShadowOffset: colors.neonShadowOffset,
+    textShadowRadius: 2,
   },
   quickStatsContainer: {
     marginTop: 20,
