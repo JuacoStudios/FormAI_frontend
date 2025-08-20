@@ -31,6 +31,9 @@ export function usePaywall() {
       setIsPremium(isPremiumUser);
       setPaywallDismissed(wasDismissed);
 
+      // Debug logging
+      console.log('🔍 Paywall status:', { hasScanned, isPremiumUser, wasDismissed });
+
       // Show paywall if user has scanned, is not premium, and hasn't dismissed it
       if (hasScanned && !isPremiumUser && !wasDismissed) {
         setShouldShowPaywall(true);

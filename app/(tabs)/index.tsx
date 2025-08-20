@@ -1,35 +1,28 @@
 import { useEffect, useRef, useState } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View, Animated, Easing } from 'react-native';
-import { CameraView, CameraType, useCameraPermissions, Camera } from 'expo-camera';
+import { StyleSheet, Text, TouchableOpacity, View, Animated, Easing, Modal, Platform, Alert } from 'react-native';
+import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
 import { Camera as CameraIcon, Camera as FlipCamera } from 'lucide-react-native';
 import { BlurView } from 'expo-blur';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
-import { config } from '../config';
+import config from '../config';
 import { usePaywall } from '@/hooks/usePaywall';
 import PaywallScreen from '@/components/PaywallScreen';
 import { Linking } from 'react-native';
 
-// Storage key for tracking scan attempts
+// Storage keys
 const SCAN_COUNT_KEY = 'scanAttemptCount';
-const SCAN_HISTORY_KEY = 'scanHistory'; // NUEVO: clave para historial
+const SCAN_HISTORY_KEY = 'scanHistory';
 
 // Helper function to convert base64 to Blob
 const base64ToBlob = (base64: string, mimeType: string = 'image/jpeg'): Blob => {
   try {
-    // Remove data URL prefix if present
     const cleanBase64 = base64.replace(/^data:image\/\w+;base64,/, '');
-    
-    // Convert base64 to binary string
     const binaryString = atob(cleanBase64);
-    
-    // Convert binary string to Uint8Array
     const bytes = new Uint8Array(binaryString.length);
     for (let i = 0; i < binaryString.length; i++) {
       bytes[i] = binaryString.charCodeAt(i);
     }
-    
-    // Create Blob
     return new Blob([bytes], { type: mimeType });
   } catch (error) {
     console.error('Error converting base64 to Blob:', error);
@@ -44,9 +37,13 @@ export default function ScanScreen() {
   const [analyzing, setAnalyzing] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const [scanCount, setScanCount] = useState<number>(0);
-  const [showPaywallAfterScan, setShowPaywallAfterScan] = useState<boolean>(false);
   const cameraRef = useRef<CameraView>(null);
   const [buttonScale] = useState(new Animated.Value(1));
+  
+  // Welcome modal states
+  const [showWelcomeModal, setShowWelcomeModal] = useState(false);
+  const [modalOpacity] = useState(new Animated.Value(0));
+  const [modalScale] = useState(new Animated.Value(0.8));
   
   const {
     shouldShowPaywall,
@@ -61,9 +58,68 @@ export default function ScanScreen() {
 
   // Load scan count from AsyncStorage on component mount
   useEffect(() => {
-    console.debug('scan: mounted');
+    console.log('🔍 Scan screen mounted');
     loadScanCount();
+    checkFirstTimeUser();
   }, []);
+
+  // Check if this is the first time the user opens the app
+  const checkFirstTimeUser = async () => {
+    try {
+      const hasSeenWelcome = await AsyncStorage.getItem('hasSeenWelcome');
+      if (!hasSeenWelcome) {
+        setTimeout(() => {
+          setShowWelcomeModal(true);
+          showWelcomeAnimation();
+        }, 500);
+      }
+    } catch (error) {
+      console.error('Error checking first time user:', error);
+    }
+  };
+
+  // Welcome modal animation
+  const showWelcomeAnimation = () => {
+    Animated.parallel([
+      Animated.timing(modalOpacity, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+        easing: Easing.out(Easing.ease),
+      }),
+      Animated.timing(modalScale, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+        easing: Easing.out(Easing.back(1.1)),
+      }),
+    ]).start();
+  };
+
+  const hideWelcomeModal = async () => {
+    try {
+      await AsyncStorage.setItem('hasSeenWelcome', 'true');
+      Animated.parallel([
+        Animated.timing(modalOpacity, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true,
+          easing: Easing.in(Easing.ease),
+        }),
+        Animated.timing(modalScale, {
+          toValue: 0.8,
+          duration: 200,
+          useNativeDriver: true,
+          easing: Easing.in(Easing.ease),
+        }),
+      ]).start(() => {
+        setShowWelcomeModal(false);
+      });
+    } catch (error) {
+      console.error('Error hiding welcome modal:', error);
+      setShowWelcomeModal(false);
+    }
+  };
 
   // Load the current scan count from persistent storage
   const loadScanCount = async () => {
@@ -93,52 +149,49 @@ export default function ScanScreen() {
   };
 
   // Reset scan count for testing purposes
-  // Call this function to reset the counter: resetScanCount()
   const resetScanCount = async () => {
     try {
       await AsyncStorage.removeItem(SCAN_COUNT_KEY);
       setScanCount(0);
       console.log('🔄 Scan count reset to 0');
+      
+      // También resetear el estado del paywall para permitir más escaneos
+      await resetPaywallState();
+      console.log('🔄 Paywall state also reset');
+      
+      Alert.alert('Éxito', 'Contador de escaneos reseteado. Puedes escanear 2 veces más.');
     } catch (error) {
       console.error('Error resetting scan count:', error);
+      Alert.alert('Error', 'No se pudo resetear el contador de escaneos.');
     }
   };
 
-  // Utility function to check current scan count (for debugging)
-  const checkScanCount = async () => {
-    try {
-      const storedCount = await AsyncStorage.getItem(SCAN_COUNT_KEY);
-      const count = storedCount ? parseInt(storedCount, 10) : 0;
-      console.log('🔍 Current scan count:', count);
-      return count;
-    } catch (error) {
-      console.error('Error checking scan count:', error);
-      return 0;
-    }
-  };
-
-  // Guardar escaneo en historial
+  // Save scan to history
   const saveScanToHistory = async (machineName: string, imageUri: string, result: string) => {
     try {
       const timestamp = Date.now();
       const newScan = { id: timestamp, machineName, imageUri, result, timestamp };
       const historyRaw = await AsyncStorage.getItem(SCAN_HISTORY_KEY);
       let history = historyRaw ? JSON.parse(historyRaw) : [];
-      history.unshift(newScan); // Agrega al inicio
-      if (history.length > 20) history = history.slice(0, 20); // Limita a 20
+      history.unshift(newScan);
+      if (history.length > 20) history = history.slice(0, 20);
       await AsyncStorage.setItem(SCAN_HISTORY_KEY, JSON.stringify(history));
     } catch (error) {
       console.error('Error guardando historial de escaneos:', error);
     }
   };
 
-  // For testing: Uncomment the line below to reset scan count on app start
-  // useEffect(() => { resetScanCount(); }, []);
-
   const canScan = isPremium || scanCount < 2;
+  
+  // Debug logging
+  console.log('🔍 Debug canScan:', { isPremium, scanCount, canScan, shouldShowPaywall });
 
   if (!permission) {
-    return <View />;
+    return (
+      <View style={styles.container}>
+        <Text style={styles.message}>Checking camera permissions...</Text>
+      </View>
+    );
   }
 
   if (!permission.granted) {
@@ -147,14 +200,28 @@ export default function ScanScreen() {
         <Text style={styles.message}>We need camera access to scan gym equipment</Text>
         <TouchableOpacity
           style={styles.button}
-          onPress={requestPermission}>
+          onPress={async () => {
+            try {
+              console.log('🔐 Requesting camera permission...');
+              const result = await requestPermission();
+              console.log('🔐 Permission result:', result);
+              
+              if (!result.granted) {
+                console.log('❌ Permission denied');
+                Alert.alert('Permiso Denegado', 'Camera permission is required to scan equipment. Please allow camera access in your browser settings.');
+              }
+            } catch (error) {
+              console.error('❌ Error requesting permission:', error);
+              Alert.alert('Error', 'Error requesting camera permission. Please check your device settings and try again.');
+            }
+          }}>
           <Text style={styles.buttonText}>Grant Permission</Text>
         </TouchableOpacity>
       </View>
     );
   }
 
-  // Animación de feedback visual para el botón de captura
+  // Button pulse animation
   const triggerButtonPulse = () => {
     Animated.sequence([
       Animated.timing(buttonScale, {
@@ -173,8 +240,8 @@ export default function ScanScreen() {
   };
 
   const handleCapture = async () => {
-    console.log('handleCapture started');
-    console.log('Estado actual:', { analyzing, canScan, shouldShowPaywall });
+    console.log('📸 handleCapture started');
+    console.log('🔍 Estado actual:', { analyzing, canScan, shouldShowPaywall, isPremium, scanCount });
     
     // Feedback visual inmediato
     triggerButtonPulse();
@@ -182,11 +249,13 @@ export default function ScanScreen() {
     // Verificar condiciones
     if (!canScan) {
       console.log('❌ No puede escanear - canScan:', canScan);
+      Alert.alert('No puedes escanear', `Estado: Premium=${isPremium}, Escaneos=${scanCount}. Usa el botón "Reset Escaneos" para continuar.`);
       return;
     }
     
     if (shouldShowPaywall) {
       console.log('❌ Paywall activo - shouldShowPaywall:', shouldShowPaywall);
+      Alert.alert('Paywall activo', 'Usa el botón "Reset Escaneos" para continuar escaneando.');
       return;
     }
     
@@ -197,6 +266,7 @@ export default function ScanScreen() {
     
     if (!cameraRef.current) {
       console.log('❌ No hay referencia a la cámara');
+      Alert.alert('Error', 'La cámara no está lista. Intenta de nuevo.');
       return;
     }
     
@@ -206,11 +276,6 @@ export default function ScanScreen() {
     setResult(null);
     
     try {
-      console.log('cameraRef.current:', cameraRef.current);
-      if (!cameraRef.current) {
-        console.warn('cameraRef.current es null, la cámara no está lista');
-        return;
-      }
       console.log('📸 Capturando imagen...');
       const photo = await cameraRef.current.takePictureAsync({
         base64: true,
@@ -232,11 +297,17 @@ export default function ScanScreen() {
       const formData = new FormData();
       formData.append('image', blob, 'equipment.jpg');
       
-      // Debug: verificar FormData
-      console.log('📋 FormData creado con imagen de', blob.size, 'bytes');
-      
       const requestUrl = `${config.backend.apiBaseUrl}/analyze`;
       console.log('🌐 Enviando a:', requestUrl);
+      
+      // Verificar conectividad antes de hacer la llamada
+      try {
+        const testResponse = await fetch(requestUrl, { method: 'HEAD' });
+        console.log('✅ Backend reachable, status:', testResponse.status);
+      } catch (connectError) {
+        console.error('❌ Backend not reachable:', connectError);
+        throw new Error('No se puede conectar al servidor. Verifica tu conexión a internet.');
+      }
       
       // Llama a la API y espera la respuesta
       const response = await fetch(requestUrl, {
@@ -249,7 +320,6 @@ export default function ScanScreen() {
       
       const responseText = await response.text();
       console.log('📡 Respuesta del servidor:', response.status, responseText);
-      console.log('📡 Headers de respuesta:', Object.fromEntries(response.headers.entries()));
       
       if (!response.ok) {
         console.error('❌ Error HTTP:', response.status, response.statusText);
@@ -279,7 +349,7 @@ export default function ScanScreen() {
         await markFirstScanComplete();
       }
 
-      // Guardar en historial (usa la URI local de la foto y el resultado)
+      // Guardar en historial
       await saveScanToHistory(
         data.machineName || 'Desconocida',
         photo.uri,
@@ -293,7 +363,6 @@ export default function ScanScreen() {
       
     } catch (error) {
       console.error('❌ Error completo:', error);
-      console.error('❌ Stack trace:', error instanceof Error ? error.stack : 'No stack trace');
       setResult(error instanceof Error ? error.message : 'Error al analizar la imagen. Por favor, intenta de nuevo.');
     } finally {
       setAnalyzing(false);
@@ -307,15 +376,10 @@ export default function ScanScreen() {
 
   const handlePurchase = async (productId: string) => {
     try {
-      // TODO: Implement RevenueCat purchase
       console.log('Purchase initiated for:', productId);
-      
-      // Mock successful purchase for development
       await new Promise(resolve => setTimeout(resolve, 2000));
       await setPremiumStatus(true);
-      await hidePaywall(false); // Don't mark as dismissed since purchase was successful
-      
-      // Reset scan count after successful purchase to give user more scans
+      await hidePaywall(false);
       await resetScanCount();
     } catch (error) {
       console.error('Purchase failed:', error);
@@ -325,10 +389,7 @@ export default function ScanScreen() {
 
   const handleRestore = async () => {
     try {
-      // TODO: Implement RevenueCat restore
       console.log('Restore purchases initiated');
-      
-      // Mock restore for development
       await new Promise(resolve => setTimeout(resolve, 1000));
     } catch (error) {
       console.error('Restore failed:', error);
@@ -345,11 +406,8 @@ export default function ScanScreen() {
   };
 
   const handleClosePaywall = () => {
-    hidePaywall(true); // Mark as dismissed
-    setShowPaywallAfterScan(false);
+    hidePaywall(true);
   };
-
-  console.log('shouldShowPaywall:', shouldShowPaywall);
 
   return (
     <View style={styles.container}>
@@ -358,6 +416,31 @@ export default function ScanScreen() {
         style={styles.camera} 
         facing={facing}
       >
+        {/* Scan Overlay */}
+        <View style={styles.scanOverlay}>
+          {/* Title */}
+          <View style={styles.titleContainer}>
+            <Text style={styles.scanTitleLine1}>SCAN YOUR</Text>
+            <Text style={styles.scanTitleLine2}>GYM MACHINE</Text>
+          </View>
+          
+          {/* Scan instructions */}
+          <View style={styles.scanInstructions}>
+            <Text style={styles.scanInstructionText}>Position the machine within the frame</Text>
+            <Text style={styles.instructionSubtext}>Ensure good lighting for best results</Text>
+          </View>
+        </View>
+        
+        {/* Dark overlay with transparent cutout */}
+        <View style={styles.darkOverlay}>
+          <View style={styles.overlayTop} />
+          <View style={styles.overlayLeft} />
+          <View style={styles.overlayRight} />
+          <View style={styles.overlayBottom} />
+          <View style={styles.transparentCutout} />
+        </View>
+        
+        {/* Results and Controls */}
         <View style={styles.overlay}>
           {result && (
             <BlurView intensity={85} style={styles.resultContainer}>
@@ -371,37 +454,56 @@ export default function ScanScreen() {
           )}
           
           <View style={styles.controls}>
-            <TouchableOpacity
-              style={styles.flipButton}
-              onPress={toggleCameraFacing}>
-              <FlipCamera color="white" size={24} />
-            </TouchableOpacity>
+                         <TouchableOpacity
+               style={styles.flipButton}
+               onPress={() => {
+                 console.log('🔄 Flip Camera button pressed!');
+                 toggleCameraFacing();
+               }}>
+               <FlipCamera color="white" size={24} />
+             </TouchableOpacity>
             
-            {/* Botón de reset de escaneos */}
-            <TouchableOpacity
-              style={styles.resetButton}
-              onPress={resetScanCount}>
-              <Text style={styles.resetButtonText}>Reset Escaneos</Text>
-            </TouchableOpacity>
+                         {/* Botón de reset de escaneos */}
+             <TouchableOpacity
+               style={styles.resetButton}
+               onPress={() => {
+                 console.log('🔴 Reset Escaneos button pressed!');
+                 resetScanCount();
+               }}>
+               <Text style={styles.resetButtonText}>Reset Escaneos</Text>
+             </TouchableOpacity>
+            
+            {/* Debug buttons */}
+            {__DEV__ && (
+              <>
+                <TouchableOpacity
+                  style={styles.debugPaywallButton}
+                  onPress={resetPaywallState}>
+                  <Text style={styles.debugPaywallButtonText}>Reset Paywall</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity
+                  style={styles.debugPremiumButton}
+                  onPress={() => setPremiumStatus(true)}>
+                  <Text style={styles.debugPremiumButtonText}>Make Premium</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity
+                  style={styles.debugStatusButton}
+                  onPress={() => {
+                    Alert.alert('Estado Actual', `Premium: ${isPremium}\nScan Count: ${scanCount}\nCan Scan: ${canScan}\nShould Show Paywall: ${shouldShowPaywall}`);
+                  }}>
+                  <Text style={styles.debugStatusButtonText}>Status</Text>
+                </TouchableOpacity>
+              </>
+            )}
           </View>
 
-          {/* Scan counter indicator (for testing) */}
-          {__DEV__ && !isPremium && scanCount < 1 && (
+          {/* Scan counter indicator */}
+          {__DEV__ && (
             <View style={styles.debugContainer}>
               <Text style={styles.debugText}>
-                Scans: {scanCount} (Free)
-              </Text>
-              <TouchableOpacity
-                style={styles.debugButton}
-                onPress={resetScanCount}>
-                <Text style={styles.debugButtonText}>Reset</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-          {__DEV__ && isPremium && (
-            <View style={styles.debugContainer}>
-              <Text style={styles.debugText}>
-                Scans: ∞ (Premium)
+                Scans: {isPremium ? '∞ (Premium)' : `${scanCount} (Free)`}
               </Text>
               <TouchableOpacity
                 style={styles.debugButton}
@@ -413,7 +515,7 @@ export default function ScanScreen() {
         </View>
       </CameraView>
 
-      {/* Botón de captura fuera del CameraView */}
+      {/* Botón de captura */}
       <TouchableOpacity
         style={[
           styles.captureButton,
@@ -427,13 +529,56 @@ export default function ScanScreen() {
           }
         ]}
         onPress={handleCapture}
-        // disabled={analyzing || !canScan || shouldShowPaywall} // Deshabilitado temporalmente para debug
+        disabled={analyzing || !canScan || shouldShowPaywall}
         activeOpacity={0.7}
       >
         <CameraIcon color="white" size={32} />
       </TouchableOpacity>
 
-      {/* PaywallScreen is rendered as a full-screen modal, blocking interaction with the scanner */}
+      {/* Welcome Modal */}
+      <Modal
+        visible={showWelcomeModal}
+        transparent
+        animationType="none"
+        statusBarTranslucent
+      >
+        <View style={styles.welcomeModalContainer}>
+          <Animated.View 
+            style={[
+              styles.welcomeModalContent,
+              {
+                opacity: modalOpacity,
+                transform: [{ scale: modalScale }],
+              }
+            ]}
+          >
+            <Text style={styles.welcomeTitle}>Welcome!</Text>
+            <View style={styles.welcomeInstructions}>
+              <View style={styles.instructionRow}>
+                <Text style={styles.instructionEmoji}>👉</Text>
+                <Text style={styles.instructionText}>Get close to the machine</Text>
+              </View>
+              <View style={styles.instructionRow}>
+                <Text style={styles.instructionEmoji}>📸</Text>
+                <Text style={styles.instructionText}>Take a photo</Text>
+              </View>
+              <View style={styles.instructionRow}>
+                <Text style={styles.instructionEmoji}>⏳</Text>
+                <Text style={styles.instructionText}>Wait a few seconds</Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              style={styles.welcomeCloseButton}
+              onPress={hideWelcomeModal}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.welcomeCloseButtonText}>Got it!</Text>
+            </TouchableOpacity>
+          </Animated.View>
+        </View>
+      </Modal>
+
+      {/* PaywallScreen */}
       <PaywallScreen
         visible={shouldShowPaywall}
         onClose={handleClosePaywall}
@@ -458,6 +603,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'transparent',
     justifyContent: 'flex-end',
+    zIndex: 20,
   },
   controls: {
     flexDirection: 'row',
@@ -486,6 +632,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'center',
     alignItems: 'center',
+    zIndex: 25,
   },
   message: {
     color: 'white',
@@ -534,6 +681,7 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 8,
     alignItems: 'center',
+    zIndex: 25,
   },
   debugText: {
     color: 'white',
@@ -561,10 +709,255 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.3)',
+    zIndex: 25,
   },
   resetButtonText: {
     color: 'white',
     fontSize: 12,
     fontWeight: '600',
+  },
+  debugPaywallButton: {
+    position: 'absolute',
+    right: 20,
+    top: 100,
+    backgroundColor: 'rgba(0, 255, 0, 0.8)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+    zIndex: 25,
+  },
+  debugPaywallButtonText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  debugPremiumButton: {
+    position: 'absolute',
+    right: 20,
+    top: 140,
+    backgroundColor: 'rgba(255, 165, 0, 0.8)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+    zIndex: 25,
+  },
+  debugPremiumButtonText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  debugStatusButton: {
+    position: 'absolute',
+    right: 20,
+    top: 180,
+    backgroundColor: 'rgba(0, 0, 255, 0.8)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+    zIndex: 25,
+  },
+  debugStatusButtonText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  // Welcome Modal Styles
+  welcomeModalContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 30,
+  },
+  welcomeModalContent: {
+    backgroundColor: 'white',
+    borderRadius: 20,
+    padding: 30,
+    alignItems: 'center',
+    maxWidth: 320,
+    width: '100%',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 10,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  welcomeTitle: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#1a1a1a',
+    marginBottom: 25,
+    textAlign: 'center',
+  },
+  welcomeInstructions: {
+    width: '100%',
+    marginBottom: 30,
+  },
+  instructionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+    paddingHorizontal: 8,
+  },
+  instructionEmoji: {
+    fontSize: 22,
+    marginRight: 15,
+    width: 30,
+    textAlign: 'center',
+  },
+  instructionText: {
+    fontSize: 16,
+    color: '#4a4a4a',
+    fontWeight: '500',
+    flex: 1,
+    lineHeight: 22,
+  },
+  welcomeCloseButton: {
+    backgroundColor: '#00e676',
+    paddingHorizontal: 35,
+    paddingVertical: 15,
+    borderRadius: 25,
+    shadowColor: '#00e676',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  welcomeCloseButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  // Scan Overlay Styles
+  scanOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'transparent',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: 80,
+    paddingBottom: 140,
+    zIndex: 5,
+    pointerEvents: 'none',
+  },
+  titleContainer: {
+    alignItems: 'center',
+    marginBottom: 30,
+    flex: 0,
+  },
+  scanTitleLine1: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#00e676',
+    textAlign: 'center',
+    textShadowColor: 'rgba(0, 0, 0, 0.8)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
+    letterSpacing: 1,
+    marginBottom: 8,
+  },
+  scanTitleLine2: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#00e676',
+    textAlign: 'center',
+    textShadowColor: 'rgba(0, 0, 0, 0.8)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
+    letterSpacing: 1,
+  },
+  scanInstructions: {
+    alignItems: 'center',
+    paddingHorizontal: 30,
+    flex: 0,
+    marginTop: 20,
+  },
+  scanInstructionText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: 'white',
+    textAlign: 'center',
+    marginBottom: 8,
+    textShadowColor: 'rgba(0, 0, 0, 0.8)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  instructionSubtext: {
+    fontSize: 14,
+    fontWeight: '400',
+    color: '#cccccc',
+    textAlign: 'center',
+    textShadowColor: 'rgba(0, 0, 0, 0.8)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  // Enhanced overlay styles
+  darkOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    pointerEvents: 'none',
+    zIndex: 1,
+  },
+  overlayTop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 200,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  overlayLeft: {
+    position: 'absolute',
+    top: 200,
+    left: 0,
+    width: 80,
+    bottom: 200,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  overlayRight: {
+    position: 'absolute',
+    top: 200,
+    right: 0,
+    width: 80,
+    bottom: 200,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  overlayBottom: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 200,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  transparentCutout: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    width: 280,
+    height: 280,
+    marginTop: -140,
+    marginLeft: -140,
+    backgroundColor: 'transparent',
+    zIndex: -1,
   },
 });

@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router';
 import { colors } from '@/theme/colors';
 import OnboardingSelectableCard from './OnboardingSelectableCard';
 import OnboardingTest from './OnboardingTest';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function OnboardingScreen() {
   const {
@@ -17,6 +18,7 @@ export default function OnboardingScreen() {
     previousStep,
     updateAnswer,
     complete,
+    resetOnboarding,
   } = useOnboarding();
   const router = useRouter();
 
@@ -78,6 +80,11 @@ export default function OnboardingScreen() {
     previousStep();
   };
 
+  // Debug function to reset onboarding state
+  const resetOnboardingState = async () => {
+    await resetOnboarding();
+  };
+
   return (
     <View style={styles.container}>
       {/* Status Bar */}
@@ -108,6 +115,13 @@ export default function OnboardingScreen() {
             Step {currentStep + 1} of 6
           </Text>
         </View>
+
+        {/* Debug button */}
+        {__DEV__ && (
+          <TouchableOpacity style={styles.debugButton} onPress={resetOnboardingState}>
+            <Text style={styles.debugButtonText}>Reset</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Content */}
@@ -272,6 +286,17 @@ const styles = StyleSheet.create({
   continueButtonText: {
     color: colors.black,
     fontSize: 18,
+    fontWeight: '700',
+  },
+  debugButton: {
+    backgroundColor: colors.neonGreen,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  debugButtonText: {
+    color: colors.black,
+    fontSize: 12,
     fontWeight: '700',
   },
 });
