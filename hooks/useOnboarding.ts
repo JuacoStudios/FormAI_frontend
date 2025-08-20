@@ -78,6 +78,8 @@ export function useOnboarding() {
     try {
       await AsyncStorage.setItem(ONBOARDING_COMPLETED_KEY, '1');
       setCompleted(true);
+      // Navigate to main app after completing onboarding
+      router.replace('/(tabs)');
     } catch (e) {
       console.error('Failed to save onboarding status', e);
     }
@@ -104,6 +106,19 @@ export function useOnboarding() {
   const canContinue = () => !!getCurrentAnswer();
   const isLastStep = () => currentStep === ONBOARDING_STEPS.length - 1;
 
+  // Debug function to reset onboarding state
+  const resetOnboarding = async () => {
+    try {
+      await AsyncStorage.removeItem(ONBOARDING_COMPLETED_KEY);
+      setCompleted(false);
+      setCurrentStep(0);
+      setAnswers({});
+      console.log('🔄 Onboarding reset complete');
+    } catch (e) {
+      console.error('Failed to reset onboarding', e);
+    }
+  };
+
   return {
     currentStep,
     answers,
@@ -117,5 +132,6 @@ export function useOnboarding() {
     previousStep,
     updateAnswer,
     complete,
+    resetOnboarding,
   };
 }
