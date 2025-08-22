@@ -5,10 +5,17 @@
   "private": true,
   "scripts": {
     "dev": "EXPO_NO_TELEMETRY=1 expo start",
+    "start": "expo start",
+    "web": "expo start --web",
     "build:web": "expo export --platform web",
+    "build:pwa": "expo export --platform web --clear",
     "lint": "expo lint",
     "android": "expo run:android",
-    "ios": "expo run:ios"
+    "ios": "expo run:ios",
+    "deploy:vercel": "npm run build:pwa && vercel --prod",
+    "audit:lighthouse": "node scripts/lighthouse-audit.js",
+    "audit:lighthouse:local": "npm run web & timeout 10 && node scripts/lighthouse-audit.js http://localhost:19006",
+    "test:web": "npm run build:web && npm run audit:lighthouse"
   },
   "dependencies": {
     "@expo-google-fonts/inter": "^0.2.3",
@@ -18,6 +25,8 @@
     "@react-native-picker/picker": "^2.11.1",
     "@react-navigation/bottom-tabs": "^7.2.0",
     "@react-navigation/native": "^7.0.14",
+    "buffer": "^6.0.3",
+    "crypto-browserify": "^3.12.1",
     "dotenv": "^16.5.0",
     "expo": "~52.0.47",
     "expo-blur": "^14.0.3",
@@ -46,7 +55,9 @@
     "react-native-svg": "15.8.0",
     "react-native-url-polyfill": "^2.0.0",
     "react-native-web": "^0.19.13",
-    "react-native-webview": "13.12.5"
+    "react-native-webview": "13.12.5",
+    "stream-browserify": "^3.0.0",
+    "workbox-webpack-plugin": "^7.3.0"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",

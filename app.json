@@ -1,12 +1,15 @@
 {
   "expo": {
-    "name": "Bolt Expo App",
+    "name": "FormAI - Análisis de Equipos",
+    "shortName": "FormAI",
     "slug": "bolt-expo-app",
     "version": "1.0.10",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "myapp",
     "userInterfaceStyle": "automatic",
+    "backgroundColor": "#ffffff",
+    "themeColor": "#007AFF",
     "splash": {
       "image": "./assets/images/splashscreen_logo.png",
       "resizeMode": "contain",
@@ -28,9 +31,31 @@
     },
     "web": {
       "bundler": "metro",
-      "output": "server",
+      "output": "static",
+      "display": "standalone",
       "favicon": "./assets/images/favicon.png",
-      "scripts": ["./debug-utils.js"]
+      "scripts": ["./debug-utils.js"],
+      "scope": "/",
+      "startUrl": "/",
+      "orientation": "portrait",
+      "categories": ["productivity", "utilities"],
+      "description": "Aplicación para análisis y diagnóstico de equipos industriales",
+      "lang": "es",
+      "dir": "ltr",
+      "icons": [
+        {
+          "src": "./assets/images/icon.png",
+          "sizes": "192x192",
+          "type": "image/png",
+          "purpose": "any maskable"
+        },
+        {
+          "src": "./assets/images/icon.png",
+          "sizes": "512x512",
+          "type": "image/png",
+          "purpose": "any maskable"
+        }
+      ]
     },
     "plugins": [
       "expo-router",

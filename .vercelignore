@@ -1,0 +1,72 @@
+# Archivos y directorios a excluir del despliegue en Vercel
+
+# Dependencias de desarrollo
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Archivos de build nativos
+android/
+ios/
+*.apk
+*.aab
+*.ipa
+
+# Archivos de configuración local
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Archivos de desarrollo
+.expo/
+.expo-shared/
+*.log
+.DS_Store
+Thumbs.db
+
+# Archivos de backup
+android_backup_antes_prebuild/
+*.bak
+*.backup
+
+# Archivos de certificados
+*.jks
+*.keystore
+*.p12
+*.pem
+
+# Archivos de configuración de IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Archivos temporales
+tmp/
+temp/
+*.tmp
+
+# Archivos de test
+__tests__/
+*.test.js
+*.test.ts
+*.spec.js
+*.spec.ts
+
+# Archivos de documentación
+*.md
+!README.md
+!DEPLOYMENT_README.md
+
+# Archivos de configuración de git
+.git/
+.gitignore
+
+# Archivos de configuración de EAS
+eas.json
+upload-key.jks
+
+# Archivos de configuración de Bolt
+.bolt/
