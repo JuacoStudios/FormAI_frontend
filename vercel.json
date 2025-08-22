@@ -7,47 +7,76 @@
       "use": "@vercel/static"
     }
   ],
-  "routes": [
+  "rewrites": [
     {
-      "src": "/manifest.json",
-      "dest": "/web-build/manifest.json",
-      "headers": {
-        "Cache-Control": "public, max-age=3600"
-      }
+      "source": "/manifest.json",
+      "destination": "/web-build/manifest.json"
     },
     {
-      "src": "/service-worker.js",
-      "dest": "/web-build/service-worker.js",
-      "headers": {
-        "Cache-Control": "public, max-age=0, no-cache"
-      }
+      "source": "/service-worker.js",
+      "destination": "/web-build/service-worker.js"
     },
     {
-      "src": "/static/(.*)",
-      "dest": "/web-build/static/$1",
-      "headers": {
-        "Cache-Control": "public, max-age=31536000, immutable"
-      }
+      "source": "/static/(.*)",
+      "destination": "/web-build/static/$1"
     },
     {
-      "src": "/assets/(.*)",
-      "dest": "/web-build/assets/$1",
-      "headers": {
-        "Cache-Control": "public, max-age=31536000, immutable"
-      }
+      "source": "/assets/(.*)",
+      "destination": "/web-build/assets/$1"
     },
     {
-      "src": "/(.*)",
-      "dest": "/web-build/index.html",
-      "headers": {
-        "Cache-Control": "public, max-age=0, no-cache"
-      }
+      "source": "/(.*)",
+      "destination": "/web-build/index.html"
     }
   ],
   "headers": [
     {
+      "source": "/manifest.json",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "application/manifest+json"
+        },
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=3600"
+        }
+      ]
+    },
+    {
+      "source": "/service-worker.js",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=0, no-cache"
+        }
+      ]
+    },
+    {
+      "source": "/static/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    },
+    {
+      "source": "/assets/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    },
+    {
       "source": "/(.*)",
       "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=0, no-cache"
+        },
         {
           "key": "X-Content-Type-Options",
           "value": "nosniff"
@@ -63,15 +92,6 @@
         {
           "key": "Referrer-Policy",
           "value": "strict-origin-when-cross-origin"
-        }
-      ]
-    },
-    {
-      "source": "/manifest.json",
-      "headers": [
-        {
-          "key": "Content-Type",
-          "value": "application/manifest+json"
         }
       ]
     }
