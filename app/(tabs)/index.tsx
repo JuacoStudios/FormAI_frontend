@@ -9,6 +9,8 @@ import config from '../config';
 import { usePaywall } from '@/hooks/usePaywall';
 import PaywallScreen from '@/components/PaywallScreen';
 import { Linking } from 'react-native';
+import { usePlatform } from '@/hooks/usePlatform';
+import WebCameraFallback from '@/components/WebCameraFallback';
 
 // Storage keys
 const SCAN_COUNT_KEY = 'scanAttemptCount';
@@ -32,6 +34,7 @@ const base64ToBlob = (base64: string, mimeType: string = 'image/jpeg'): Blob => 
 
 export default function ScanScreen() {
   const router = useRouter();
+  const { isWeb, webFeatures } = usePlatform();
   const [facing, setFacing] = useState<CameraType>('back');
   const [permission, requestPermission] = useCameraPermissions();
   const [analyzing, setAnalyzing] = useState(false);
@@ -408,6 +411,106 @@ export default function ScanScreen() {
   const handleClosePaywall = () => {
     hidePaywall(true);
   };
+
+  // Función para manejar captura de imagen desde web
+  const handleWebImageCapture = async (base64: string) => {
+    console.log('📸 handleWebImageCapture started');
+    
+    if (!canScan) {
+      Alert.alert('No puedes escanear', `Estado: Premium=${isPremium}, Escaneos=${scanCount}. Usa el botón "Reset Escaneos" para continuar.`);
+      return;
+    }
+    
+    if (shouldShowPaywall) {
+      Alert.alert('Paywall activo', 'Usa el botón "Reset Escaneos" para continuar escaneando.');
+      return;
+    }
+    
+    setAnalyzing(true);
+    setResult(null);
+    
+    try {
+      console.log('✅ Imagen capturada desde web, preparando para API...');
+      
+      // Prepara la imagen para el backend
+      const blob = base64ToBlob(base64, 'image/jpeg');
+      console.log('📦 Blob creado:', blob.size, 'bytes');
+      
+      const formData = new FormData();
+      formData.append('image', blob, 'equipment.jpg');
+      
+      const requestUrl = `${config.backend.apiBaseUrl}/analyze`;
+      console.log('🌐 Enviando a:', requestUrl);
+      
+      // Verificar conectividad antes de hacer la llamada
+      try {
+        const testResponse = await fetch(requestUrl, { method: 'HEAD' });
+        console.log('✅ Backend reachable, status:', testResponse.status);
+      } catch (connectError) {
+        console.error('❌ Backend not reachable:', connectError);
+        throw new Error('No se puede conectar al servidor. Verifica tu conexión a internet.');
+      }
+      
+      // Llama a la API y espera la respuesta
+      const response = await fetch(requestUrl, {
+        method: 'POST',
+        body: formData,
+        headers: {
+          'Accept': 'application/json',
+        },
+      });
+      
+      const responseText = await response.text();
+      console.log('📡 Respuesta del servidor:', response.status, responseText);
+      
+      if (!response.ok) {
+        console.error('❌ Error HTTP:', response.status, response.statusText);
+        throw new Error(`Error en el backend: ${response.status} - ${responseText}`);
+      }
+      
+      let data;
+      try {
+        data = JSON.parse(responseText);
+        console.log('✅ API Success:', data);
+      } catch (parseError) {
+        console.error('❌ Error parsing JSON:', parseError);
+        throw new Error('Respuesta del servidor no es JSON válido');
+      }
+      
+      if (data.success && data.result) {
+        setResult(data.result);
+        await incrementScanCount();
+        markFirstScanComplete();
+        console.log('✅ Análisis completado exitosamente');
+      } else {
+        throw new Error(data.error || 'Respuesta inesperada del servidor');
+      }
+      
+    } catch (error) {
+      console.error('❌ Error en handleWebImageCapture:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+      Alert.alert('Error', errorMessage);
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
+  // Si es web y no tiene cámara, mostrar fallback
+  if (isWeb && !webFeatures.hasCamera) {
+    return (
+      <View style={styles.container}>
+        <WebCameraFallback
+          onImageCaptured={(base64) => {
+            // Procesar la imagen capturada desde web
+            handleWebImageCapture(base64);
+          }}
+          onError={(error) => {
+            Alert.alert('Error', error);
+          }}
+        />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
