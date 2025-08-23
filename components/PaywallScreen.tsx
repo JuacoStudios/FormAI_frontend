@@ -25,7 +25,8 @@ import Animated, {
   ZoomIn,
 } from 'react-native-reanimated';
 import Purchases from 'react-native-purchases';
-import { fetchRevenueCatOfferings } from '../services/revenuecatApi';
+import RevenueCatWebService from '../services/revenuecatWeb';
+import config from '../app/config';
 
 const { width, height } = Dimensions.get('window');
 
@@ -52,14 +53,14 @@ interface PaywallProps {
 
 const pricingOptions: PricingOption[] = [
   {
-    id: 'monthly',
+    id: '$rc_monthly',
     title: 'Monthly',
     price: '$10',
     period: '/month',
     benefit: 'x10 more scans per month',
   },
   {
-    id: 'annual',
+    id: '$rc_annual',
     title: 'Annual',
     price: '$99',
     period: '/year',
@@ -97,7 +98,7 @@ export default function PaywallScreen({
   onPrivacy,
   loading = false,
 }: PaywallProps) {
-  const [selectedOption, setSelectedOption] = useState('annual');
+  const [selectedOption, setSelectedOption] = useState('$rc_annual');
   const [purchasing, setPurchasing] = useState(false);
   const [offerings, setOfferings] = useState<any>(null);
   const [packages, setPackages] = useState<any[]>([]);
@@ -124,9 +125,13 @@ export default function PaywallScreen({
   useEffect(() => {
     async function loadOfferings() {
       try {
-        const data = await fetchRevenueCatOfferings();
+        const revenueCatService = RevenueCatWebService.getInstance();
+        await revenueCatService.configure();
+        const data = await revenueCatService.getOfferings();
         setOfferings(data);
+        setPackages(data.availablePackages);
       } catch (err) {
+        console.error('Failed to load offerings:', err);
         setOfferings(null);
       } finally {
         setOfferingsLoading(false);
@@ -154,17 +159,34 @@ export default function PaywallScreen({
     }
     setPurchasing(true);
     try {
-      const selectedPackage = packages[0];
-      const purchaseResult = await Purchases.purchasePackage(selectedPackage);
-      console.log('✅ Compra exitosa:', purchaseResult);
-      alert('¡Compra exitosa!');
-      if (onPurchase) await onPurchase(selectedPackage.identifier);
+      const selectedPackage = packages.find(pkg => pkg.identifier === selectedOption);
+      if (!selectedPackage) {
+        throw new Error('Selected package not found');
+      }
+      
+      console.log(`🛒 Iniciando compra para: ${selectedPackage.title} (${selectedPackage.stripePriceId})`);
+      
+      const revenueCatService = RevenueCatWebService.getInstance();
+      const purchaseResult = await revenueCatService.purchaseProduct(selectedPackage.identifier);
+      
+      if (purchaseResult.success) {
+        console.log('✅ Compra iniciada exitosamente:', purchaseResult);
+        // The redirect to Stripe checkout should happen automatically
+        // No need to show success alert as user will be redirected
+      } else {
+        throw new Error('Purchase failed');
+      }
     } catch (error: any) {
-      if (error.userCancelled) {
-        alert('Compra cancelada por el usuario.');
+      console.error('❌ Error en la compra:', error);
+      
+      if (error.message.includes('Stripe price IDs not configured')) {
+        alert('Error de configuración: Los IDs de Stripe no están configurados. Contacta al administrador.');
+      } else if (error.message.includes('Invalid price ID')) {
+        alert('Error de configuración: ID de precio inválido. Contacta al administrador.');
+      } else if (error.message.includes('Failed to create checkout session')) {
+        alert('Error al crear la sesión de pago. Intenta de nuevo o contacta al soporte.');
       } else {
         alert('Error al procesar la compra. Intenta de nuevo.');
-        console.error('❌ Error en la compra:', error);
       }
     } finally {
       setPurchasing(false);
@@ -303,23 +325,59 @@ export default function PaywallScreen({
               </Text>
             </Animated.View>
 
-            {/* RevenueCat Products UI */}
+            {/* RevenueCat Products Debug Info */}
             {offeringsLoading ? (
               <View style={{ marginVertical: 20, alignItems: 'center' }}>
                 <ActivityIndicator size="large" color="#00e676" />
                 <Text style={{ color: 'white', textAlign: 'center', marginTop: 12 }}>Cargando planes...</Text>
               </View>
             ) : offerings === null ? (
-              <Text style={{ color: 'white', textAlign: 'center', marginVertical: 20 }}>No plans available right now.</Text>
+              <View style={{ marginVertical: 20, alignItems: 'center' }}>
+                <Text style={{ color: '#ff6b6b', textAlign: 'center', marginBottom: 8, fontWeight: 'bold' }}>
+                  ❌ No plans available right now
+                </Text>
+                <Text style={{ color: '#aaa', textAlign: 'center', fontSize: 12, marginBottom: 8 }}>
+                  Check console for configuration errors
+                </Text>
+                <Text style={{ color: '#666', textAlign: 'center', fontSize: 10 }}>
+                  Verify EXPO_PUBLIC_STRIPE_PRICE_ID variables are set
+                </Text>
+              </View>
             ) : (
-              <View style={{ marginVertical: 20 }}>
-                {offerings.map((pkg: any) => (
-                  <View key={pkg.identifier} style={{ backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 12, padding: 16, marginBottom: 12 }}>
-                    <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 18 }}>{pkg.product.title}</Text>
-                    <Text style={{ color: '#aaa', marginBottom: 4 }}>{pkg.product.description}</Text>
-                    <Text style={{ color: '#00e676', fontWeight: 'bold', fontSize: 16 }}>{pkg.product.priceString}</Text>
+              <View style={{ marginVertical: 20, alignItems: 'center' }}>
+                <Text style={{ color: '#00e676', textAlign: 'center', marginBottom: 12, fontWeight: 'bold' }}>
+                  ✅ RevenueCat Products Loaded
+                </Text>
+                {offerings.availablePackages?.map((pkg: any) => (
+                  <View key={pkg.identifier} style={{ backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 12, padding: 16, marginBottom: 12, width: '100%' }}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                      <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 16 }}>{pkg.title}</Text>
+                      <View style={{ backgroundColor: pkg.packageType === 'MONTHLY' ? '#4CAF50' : '#FF9800', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 }}>
+                        <Text style={{ color: 'white', fontSize: 10, fontWeight: 'bold' }}>{pkg.packageType}</Text>
+                      </View>
+                    </View>
+                    <Text style={{ color: '#aaa', marginBottom: 4, fontSize: 12 }}>{pkg.description}</Text>
+                    <Text style={{ color: '#00e676', fontWeight: 'bold', fontSize: 14, marginBottom: 4 }}>{pkg.priceString}</Text>
+                    <View style={{ backgroundColor: 'rgba(0,0,0,0.2)', padding: 8, borderRadius: 6 }}>
+                      <Text style={{ color: '#666', fontSize: 10, fontFamily: 'monospace' }}>
+                        Stripe Price ID: {pkg.stripePriceId}
+                      </Text>
+                      <Text style={{ color: '#666', fontSize: 10, fontFamily: 'monospace' }}>
+                        RevenueCat ID: {pkg.identifier}
+                      </Text>
+                    </View>
                   </View>
                 ))}
+                
+                {/* Configuration Status */}
+                <View style={{ backgroundColor: 'rgba(0,230,118,0.1)', borderRadius: 12, padding: 16, width: '100%', borderWidth: 1, borderColor: 'rgba(0,230,118,0.3)' }}>
+                  <Text style={{ color: '#00e676', textAlign: 'center', fontWeight: 'bold', marginBottom: 8 }}>
+                    🔧 Configuration Status
+                  </Text>
+                  <Text style={{ color: '#00e676', fontSize: 12, textAlign: 'center' }}>
+                    Monthly: {config.stripe.monthlyPriceId ? '✅' : '❌'} | Annual: {config.stripe.annualPriceId ? '✅' : '❌'}
+                  </Text>
+                </View>
               </View>
             )}
 

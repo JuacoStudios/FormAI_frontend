@@ -255,3 +255,4 @@ const getNativeModule = (moduleName: string) => {
 - Consulta la documentación de Expo Web y Vercel
 
 **¡Tu app está lista para el mundo web! 🌍**
+

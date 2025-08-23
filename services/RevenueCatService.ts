@@ -2,6 +2,8 @@
 // Note: This requires native code and won't work in Bolt's preview
 // Developers need to export project and install RevenueCat SDK locally
 
+import config from '../app/config';
+
 interface PurchasePackage {
   identifier: string;
   packageType: string;
@@ -12,6 +14,7 @@ interface PurchasePackage {
     price: number;
     priceString: string;
     currencyCode: string;
+    stripePriceId?: string;
   };
 }
 
@@ -43,8 +46,21 @@ class RevenueCatService {
     return RevenueCatService.instance;
   }
 
+  private validateStripeConfig(): void {
+    if (!config.stripe.monthlyPriceId || !config.stripe.annualPriceId) {
+      throw new Error('Stripe price IDs not configured. Please set EXPO_PUBLIC_STRIPE_PRICE_ID and EXPO_PUBLIC_STRIPE_PRICE_ID_YEA');
+    }
+    console.log('✅ Stripe configuration validated:', {
+      monthly: config.stripe.monthlyPriceId,
+      annual: config.stripe.annualPriceId
+    });
+  }
+
   async configure(apiKey: string, userId?: string): Promise<void> {
     try {
+      // Validate Stripe configuration first
+      this.validateStripeConfig();
+      
       // TODO: Initialize RevenueCat SDK
       // import Purchases from 'react-native-purchases';
       // await Purchases.configure({ apiKey, appUserID: userId });
@@ -72,15 +88,19 @@ class RevenueCatService {
     }
 
     try {
+      // Validate Stripe config again
+      this.validateStripeConfig();
+      
       // TODO: Get offerings from RevenueCat
       // import Purchases from 'react-native-purchases';
       // const offerings = await Purchases.getOfferings();
       // return offerings.current?.availablePackages || [];
       
       // Mock data for development - matches your pricing structure
+      // Now using environment variables for Stripe price IDs
       return [
         {
-          identifier: 'monthly',
+          identifier: config.revenuecat.monthlyProductId,
           packageType: 'MONTHLY',
           product: {
             identifier: 'premium_monthly',
@@ -89,10 +109,11 @@ class RevenueCatService {
             price: 10.00,
             priceString: '$10.00',
             currencyCode: 'USD',
+            stripePriceId: config.stripe.monthlyPriceId,
           },
         },
         {
-          identifier: 'annual',
+          identifier: config.revenuecat.annualProductId,
           packageType: 'ANNUAL',
           product: {
             identifier: 'premium_annual',
@@ -101,6 +122,7 @@ class RevenueCatService {
             price: 99.00,
             priceString: '$99.00',
             currencyCode: 'USD',
+            stripePriceId: config.stripe.annualPriceId,
           },
         },
       ];
