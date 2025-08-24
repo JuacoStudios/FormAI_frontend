@@ -6,7 +6,7 @@
     "version": "1.0.10",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "myapp",
+    "scheme": "formai",
     "userInterfaceStyle": "automatic",
     "backgroundColor": "#ffffff",
     "themeColor": "#007AFF",
@@ -19,7 +19,8 @@
       "**/*"
     ],
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.yourcompany.formai"
     },
     "android": {
       "adaptiveIcon": {
@@ -27,7 +28,14 @@
         "backgroundColor": "#ffffff"
       },
       "package": "com.yourcompany.formai",
-      "versionCode": 17
+      "versionCode": 17,
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "category": ["BROWSABLE", "DEFAULT"],
+          "data": [{ "scheme": "formai" }]
+        }
+      ]
     },
     "web": {
       "bundler": "metro",

@@ -24,9 +24,8 @@ import Animated, {
   SlideInUp,
   ZoomIn,
 } from 'react-native-reanimated';
-import Purchases from 'react-native-purchases';
-import RevenueCatWebService from '../services/revenuecatWeb';
-import config from '../app/config';
+import * as WebBrowser from 'expo-web-browser';
+import { createCheckout, getProducts, createStripeCheckout, getStripePrices } from '../src/lib/api';
 
 const { width, height } = Dimensions.get('window');
 
@@ -39,6 +38,7 @@ interface PricingOption {
   badge?: string;
   savings?: string;
   benefit: string;
+  variantId?: string;
 }
 
 interface PaywallProps {
@@ -53,14 +53,14 @@ interface PaywallProps {
 
 const pricingOptions: PricingOption[] = [
   {
-    id: '$rc_monthly',
+    id: 'monthly',
     title: 'Monthly',
     price: '$10',
     period: '/month',
     benefit: 'x10 more scans per month',
   },
   {
-    id: '$rc_annual',
+    id: 'annual',
     title: 'Annual',
     price: '$99',
     period: '/year',
@@ -98,11 +98,12 @@ export default function PaywallScreen({
   onPrivacy,
   loading = false,
 }: PaywallProps) {
-  const [selectedOption, setSelectedOption] = useState('$rc_annual');
+  const [selectedOption, setSelectedOption] = useState('annual');
   const [purchasing, setPurchasing] = useState(false);
-  const [offerings, setOfferings] = useState<any>(null);
-  const [packages, setPackages] = useState<any[]>([]);
-  const [offeringsLoading, setOfferingsLoading] = useState(true);
+  const [products, setProducts] = useState<any[]>([]);
+  const [productsLoading, setProductsLoading] = useState(true);
+  const [stripePrices, setStripePrices] = useState<any>(null);
+  const [stripePricesLoading, setStripePricesLoading] = useState(true);
   
   const pulseAnimation = useSharedValue(1);
   const glowAnimation = useSharedValue(0);
@@ -123,21 +124,47 @@ export default function PaywallScreen({
   }, [visible]);
 
   useEffect(() => {
-    async function loadOfferings() {
+    async function loadProducts() {
       try {
-        const revenueCatService = RevenueCatWebService.getInstance();
-        await revenueCatService.configure();
-        const data = await revenueCatService.getOfferings();
-        setOfferings(data);
-        setPackages(data.availablePackages);
+        const data = await getProducts();
+        setProducts(data);
+        
+        // Map products to pricing options
+        const updatedPricingOptions = pricingOptions.map(option => {
+          const product = data.find((p: any) => 
+            p.name.toLowerCase().includes(option.id.toLowerCase())
+          );
+          return {
+            ...option,
+            variantId: product?.variantId
+          };
+        });
+        
+        // Update pricing options with variant IDs
+        pricingOptions.splice(0, pricingOptions.length, ...updatedPricingOptions);
+        
       } catch (err) {
-        console.error('Failed to load offerings:', err);
-        setOfferings(null);
+        console.error('Failed to load products:', err);
+        setProducts([]);
       } finally {
-        setOfferingsLoading(false);
+        setProductsLoading(false);
       }
     }
-    loadOfferings();
+    
+    async function loadStripePrices() {
+      try {
+        const data = await getStripePrices();
+        setStripePrices(data);
+      } catch (err) {
+        console.error('Failed to load Stripe prices:', err);
+        setStripePrices(null);
+      } finally {
+        setStripePricesLoading(false);
+      }
+    }
+    
+    loadProducts();
+    loadStripePrices();
   }, []);
 
   const animatedPulseStyle = useAnimatedStyle(() => {
@@ -153,41 +180,61 @@ export default function PaywallScreen({
   });
 
   const handlePurchase = async () => {
-    if (!packages.length) {
+    const selectedPlan = pricingOptions.find(option => option.id === selectedOption);
+    if (!selectedPlan?.variantId) {
       alert('No hay productos disponibles para comprar.');
       return;
     }
+    
     setPurchasing(true);
     try {
-      const selectedPackage = packages.find(pkg => pkg.identifier === selectedOption);
-      if (!selectedPackage) {
-        throw new Error('Selected package not found');
+      console.log(`🛒 Iniciando compra para: ${selectedPlan.title} (${selectedPlan.variantId})`);
+      
+      // Create checkout with Lemon Squeezy
+      const checkoutUrl = await createCheckout(selectedPlan.variantId);
+      
+      console.log('✅ Checkout creado exitosamente:', checkoutUrl);
+      
+      // Open checkout in browser
+      await WebBrowser.openBrowserAsync(checkoutUrl);
+      
+      // Call onPurchase callback
+      if (onPurchase) {
+        await onPurchase(selectedPlan.id);
       }
       
-      console.log(`🛒 Iniciando compra para: ${selectedPackage.title} (${selectedPackage.stripePriceId})`);
-      
-      const revenueCatService = RevenueCatWebService.getInstance();
-      const purchaseResult = await revenueCatService.purchaseProduct(selectedPackage.identifier);
-      
-      if (purchaseResult.success) {
-        console.log('✅ Compra iniciada exitosamente:', purchaseResult);
-        // The redirect to Stripe checkout should happen automatically
-        // No need to show success alert as user will be redirected
-      } else {
-        throw new Error('Purchase failed');
-      }
     } catch (error: any) {
       console.error('❌ Error en la compra:', error);
       
-      if (error.message.includes('Stripe price IDs not configured')) {
-        alert('Error de configuración: Los IDs de Stripe no están configurados. Contacta al administrador.');
-      } else if (error.message.includes('Invalid price ID')) {
-        alert('Error de configuración: ID de precio inválido. Contacta al administrador.');
-      } else if (error.message.includes('Failed to create checkout session')) {
+      if (error.message.includes('Failed to create checkout')) {
         alert('Error al crear la sesión de pago. Intenta de nuevo o contacta al soporte.');
       } else {
         alert('Error al procesar la compra. Intenta de nuevo.');
       }
+    } finally {
+      setPurchasing(false);
+    }
+  };
+
+  // STRIPE: Handle Stripe subscription
+  const handleStripeSubscribe = async (priceId: string, email?: string) => {
+    setPurchasing(true);
+    try {
+      console.log(`💳 Iniciando suscripción Stripe para: ${priceId}`);
+      
+      const url = await createStripeCheckout(priceId, email);
+      console.log('✅ Stripe checkout creado exitosamente:', url);
+      
+      await WebBrowser.openBrowserAsync(url);
+      
+      // Call onPurchase callback
+      if (onPurchase) {
+        await onPurchase(priceId);
+      }
+      
+    } catch (error: any) {
+      console.error('❌ Error en suscripción Stripe:', error);
+      alert('Error al crear la sesión de pago de Stripe. Intenta de nuevo.');
     } finally {
       setPurchasing(false);
     }
@@ -325,59 +372,114 @@ export default function PaywallScreen({
               </Text>
             </Animated.View>
 
-            {/* RevenueCat Products Debug Info */}
-            {offeringsLoading ? (
+            {/* Lemon Squeezy Products Debug Info */}
+            {productsLoading ? (
               <View style={{ marginVertical: 20, alignItems: 'center' }}>
                 <ActivityIndicator size="large" color="#00e676" />
                 <Text style={{ color: 'white', textAlign: 'center', marginTop: 12 }}>Cargando planes...</Text>
               </View>
-            ) : offerings === null ? (
+            ) : products.length === 0 ? (
               <View style={{ marginVertical: 20, alignItems: 'center' }}>
                 <Text style={{ color: '#ff6b6b', textAlign: 'center', marginBottom: 8, fontWeight: 'bold' }}>
-                  ❌ No plans available right now
+                  ❌ No products available right now
                 </Text>
                 <Text style={{ color: '#aaa', textAlign: 'center', fontSize: 12, marginBottom: 8 }}>
-                  Check console for configuration errors
+                  Check console for API errors
                 </Text>
                 <Text style={{ color: '#666', textAlign: 'center', fontSize: 10 }}>
-                  Verify EXPO_PUBLIC_STRIPE_PRICE_ID variables are set
+                  Verify backend is running and products are configured
                 </Text>
               </View>
             ) : (
               <View style={{ marginVertical: 20, alignItems: 'center' }}>
                 <Text style={{ color: '#00e676', textAlign: 'center', marginBottom: 12, fontWeight: 'bold' }}>
-                  ✅ RevenueCat Products Loaded
+                  🍋 Lemon Squeezy Products Loaded
                 </Text>
-                {offerings.availablePackages?.map((pkg: any) => (
-                  <View key={pkg.identifier} style={{ backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 12, padding: 16, marginBottom: 12, width: '100%' }}>
+                {products.map((product: any) => (
+                  <View key={product.id} style={{ backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 12, padding: 16, marginBottom: 12, width: '100%' }}>
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                      <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 16 }}>{pkg.title}</Text>
-                      <View style={{ backgroundColor: pkg.packageType === 'MONTHLY' ? '#4CAF50' : '#FF9800', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 }}>
-                        <Text style={{ color: 'white', fontSize: 10, fontWeight: 'bold' }}>{pkg.packageType}</Text>
+                      <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 16 }}>{product.name}</Text>
+                      <View style={{ backgroundColor: '#FF6B35', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 }}>
+                        <Text style={{ color: 'white', fontSize: 10, fontWeight: 'bold' }}>LEMON</Text>
                       </View>
                     </View>
-                    <Text style={{ color: '#aaa', marginBottom: 4, fontSize: 12 }}>{pkg.description}</Text>
-                    <Text style={{ color: '#00e676', fontWeight: 'bold', fontSize: 14, marginBottom: 4 }}>{pkg.priceString}</Text>
+                    <Text style={{ color: '#aaa', marginBottom: 4, fontSize: 12 }}>{product.description}</Text>
+                    <Text style={{ color: '#00e676', fontWeight: 'bold', fontSize: 14, marginBottom: 4 }}>{product.price_formatted}</Text>
                     <View style={{ backgroundColor: 'rgba(0,0,0,0.2)', padding: 8, borderRadius: 6 }}>
                       <Text style={{ color: '#666', fontSize: 10, fontFamily: 'monospace' }}>
-                        Stripe Price ID: {pkg.stripePriceId}
+                        Product ID: {product.id}
                       </Text>
                       <Text style={{ color: '#666', fontSize: 10, fontFamily: 'monospace' }}>
-                        RevenueCat ID: {pkg.identifier}
+                        Variant ID: {product.variantId}
                       </Text>
                     </View>
                   </View>
                 ))}
                 
                 {/* Configuration Status */}
-                <View style={{ backgroundColor: 'rgba(0,230,118,0.1)', borderRadius: 12, padding: 16, width: '100%', borderWidth: 1, borderColor: 'rgba(0,230,118,0.3)' }}>
-                  <Text style={{ color: '#00e676', textAlign: 'center', fontWeight: 'bold', marginBottom: 8 }}>
-                    🔧 Configuration Status
+                <View style={{ backgroundColor: 'rgba(255,107,53,0.1)', borderRadius: 12, padding: 16, width: '100%', borderWidth: 1, borderColor: 'rgba(255,107,53,0.3)' }}>
+                  <Text style={{ color: '#FF6B35', textAlign: 'center', fontWeight: 'bold', marginBottom: 8 }}>
+                    🍋 Lemon Squeezy Status
                   </Text>
-                  <Text style={{ color: '#00e676', fontSize: 12, textAlign: 'center' }}>
-                    Monthly: {config.stripe.monthlyPriceId ? '✅' : '❌'} | Annual: {config.stripe.annualPriceId ? '✅' : '❌'}
+                  <Text style={{ color: '#FF6B35', fontSize: 12, textAlign: 'center' }}>
+                    Products: {products.length > 0 ? '✅' : '❌'} | API: Connected
                   </Text>
                 </View>
+              </View>
+            )}
+
+            {/* STRIPE: Stripe Integration Section */}
+            {stripePricesLoading ? (
+              <View style={{ marginVertical: 20, alignItems: 'center' }}>
+                <ActivityIndicator size="large" color="#6772e5" />
+                <Text style={{ color: 'white', textAlign: 'center', marginTop: 12 }}>Cargando Stripe...</Text>
+              </View>
+            ) : stripePrices ? (
+              <View style={{ marginVertical: 20, alignItems: 'center' }}>
+                <Text style={{ color: '#6772e5', textAlign: 'center', marginBottom: 12, fontWeight: 'bold' }}>
+                  💳 Stripe Integration Available
+                </Text>
+                
+                {/* Stripe Monthly Button */}
+                {stripePrices.monthly === 'configured' && (
+                  <TouchableOpacity
+                    style={[styles.stripeButton, { backgroundColor: '#6772e5' }]}
+                    onPress={() => handleStripeSubscribe(process.env.EXPO_PUBLIC_STRIPE_PRICE_ID_MONTHLY || '')}
+                    disabled={purchasing}
+                  >
+                    <Text style={styles.stripeButtonText}>Subscribe Monthly (Stripe)</Text>
+                  </TouchableOpacity>
+                )}
+                
+                {/* Stripe Annual Button */}
+                {stripePrices.annual === 'configured' && (
+                  <TouchableOpacity
+                    style={[styles.stripeButton, { backgroundColor: '#6772e5' }]}
+                    onPress={() => handleStripeSubscribe(process.env.EXPO_PUBLIC_STRIPE_PRICE_ID_ANNUAL || '')}
+                    disabled={purchasing}
+                  >
+                    <Text style={styles.stripeButtonText}>Subscribe Annual (Stripe)</Text>
+                  </TouchableOpacity>
+                )}
+                
+                {/* Stripe Status */}
+                <View style={{ backgroundColor: 'rgba(103,114,229,0.1)', borderRadius: 12, padding: 16, width: '100%', borderWidth: 1, borderColor: 'rgba(103,114,229,0.3)', marginTop: 16 }}>
+                  <Text style={{ color: '#6772e5', textAlign: 'center', fontWeight: 'bold', marginBottom: 8 }}>
+                    💳 Stripe Status
+                  </Text>
+                  <Text style={{ color: '#6772e5', fontSize: 12, textAlign: 'center' }}>
+                    Monthly: {stripePrices.monthly === 'configured' ? '✅' : '❌'} | Annual: {stripePrices.annual === 'configured' ? '✅' : '❌'}
+                  </Text>
+                </View>
+              </View>
+            ) : (
+              <View style={{ marginVertical: 20, alignItems: 'center' }}>
+                <Text style={{ color: '#ff6b6b', textAlign: 'center', marginBottom: 8, fontWeight: 'bold' }}>
+                  ❌ Stripe not available
+                </Text>
+                <Text style={{ color: '#aaa', textAlign: 'center', fontSize: 12 }}>
+                  Stripe integration not configured
+                </Text>
               </View>
             )}
 
@@ -690,5 +792,23 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#888888',
     fontWeight: '500',
+  },
+  stripeButton: {
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+    shadowColor: '#6772e5',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  stripeButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
 });
