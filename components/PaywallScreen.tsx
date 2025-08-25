@@ -27,15 +27,10 @@ import Animated, {
   ZoomIn,
 } from 'react-native-reanimated';
 import * as WebBrowser from 'expo-web-browser';
-import { createCheckout, getProducts, API_BASE, getSubscriptionStatus, assertApiReachable } from '../src/lib/api';
+import { createCheckout, getProducts, API_BASE, getSubscriptionStatus, assertApiReachable, ENV_MONTHLY, ENV_ANNUAL, WEB_ORIGIN } from '../src/lib/api';
 import { getIdentity, setUserEmail } from '../src/lib/identity';
 
 const { width, height } = Dimensions.get('window');
-
-// Calculate web origin for dynamic URLs
-const WEB_ORIGIN = Platform.OS === 'web' 
-  ? (process.env.EXPO_PUBLIC_WEB_ORIGIN || (typeof window !== 'undefined' ? window.location.origin : ''))
-  : '';
 
 interface PricingOption {
   id: string;
@@ -119,6 +114,7 @@ export default function PaywallScreen({
   const [monthlyId, setMonthlyId] = useState<string>('');
   const [annualId, setAnnualId] = useState<string>('');
   const [usingFallback, setUsingFallback] = useState(false);
+  const [canSubscribe, setCanSubscribe] = useState(false);
   
   // Animation hooks
   const pulseAnimation = useSharedValue(1);
@@ -149,15 +145,15 @@ export default function PaywallScreen({
         if (identity.email) {
           setUserEmail(identity.email);
         }
-        console.log('[Paywall] Identity initialized:', identity);
+        console.debug('[Paywall] Identity initialized:', identity);
         
         // Check subscription status
         if (identity.userId) {
           try {
             const status = await getSubscriptionStatus(identity.userId);
-            console.log('[Paywall] Subscription status:', status);
+            console.debug('[Paywall] Subscription status:', status);
             if (status.active) {
-              console.log('[Paywall] User is premium, closing paywall');
+              console.debug('[Paywall] User is premium, closing paywall');
               onClose();
             }
           } catch (error) {
@@ -190,20 +186,17 @@ export default function PaywallScreen({
     try {
       setProductsLoading(true);
       const data = await getProducts();
-      console.log('[Paywall] Products loaded:', data);
+      console.debug('[Paywall] Products loaded:', data);
       
       if (data.usingFallback) {
         // Using environment fallback
         setUsingFallback(true);
-        const monthly = process.env.EXPO_PUBLIC_STRIPE_PRICE_ID_MONTHLY || '';
-        const annual = process.env.EXPO_PUBLIC_STRIPE_PRICE_ID_ANNUAL || '';
+        setMonthlyId(data.monthly || '');
+        setAnnualId(data.annual || '');
         
-        setMonthlyId(monthly);
-        setAnnualId(annual);
+        console.debug('[Paywall] Using fallback env prices:', { monthly: data.monthly, annual: data.annual });
         
-        console.log('[Paywall] Using fallback env prices:', { monthly, annual });
-        
-        if (!monthly || !annual) {
+        if (!data.monthly || !data.annual) {
           console.warn('[Paywall] Missing environment price IDs');
         }
       } else {
@@ -218,7 +211,7 @@ export default function PaywallScreen({
         setMonthlyId(monthly);
         setAnnualId(annual);
         
-        console.log('[Paywall] Using API prices:', { monthly, annual });
+        console.debug('[Paywall] Using API prices:', { monthly, annual });
       }
       
     } catch (err) {
@@ -227,13 +220,10 @@ export default function PaywallScreen({
       setUsingFallback(true);
       
       // Fallback to environment variables
-      const monthly = process.env.EXPO_PUBLIC_STRIPE_PRICE_ID_MONTHLY || '';
-      const annual = process.env.EXPO_PUBLIC_STRIPE_PRICE_ID_ANNUAL || '';
+      setMonthlyId(ENV_MONTHLY || '');
+      setAnnualId(ENV_ANNUAL || '');
       
-      setMonthlyId(monthly);
-      setAnnualId(annual);
-      
-      console.log('[Paywall] Fallback to env prices after error:', { monthly, annual });
+      console.debug('[Paywall] Fallback to env prices after error:', { monthly: ENV_MONTHLY, annual: ENV_ANNUAL });
     } finally {
       setProductsLoading(false);
     }
@@ -245,14 +235,16 @@ export default function PaywallScreen({
     const hasEmail = userEmail.trim().length > 0;
     const canSub = hasPrices && hasEmail;
     
-    // console.log('[Paywall] Subscription availability computed:', {
-    //   hasPrices,
-    //   hasEmail,
-    //   canSubscribe: canSub,
-    //   priceMonthly: !!priceMonthly,
-    //   priceAnnual: !!priceAnnual,
-    //   userEmail: userEmail.trim().length
-    // });
+    setCanSubscribe(Boolean(canSub));
+    
+    console.debug('[Paywall] Subscription availability computed:', {
+      hasPrices,
+      hasEmail,
+      canSubscribe: canSub,
+      monthlyId: !!monthlyId,
+      annualId: !!annualId,
+      userEmail: userEmail.trim().length
+    });
   }, [monthlyId, annualId, userEmail]);
 
   // Animation style hooks
@@ -314,7 +306,7 @@ export default function PaywallScreen({
 
   // STRIPE: Handle Stripe subscription
   const handleStripeSubscribe = useCallback(async (plan: 'monthly' | 'annual') => {
-    console.log(`[Stripe] Subscribe ${plan} pressed`);
+    console.debug(`[Stripe] Subscribe ${plan} pressed`);
     
     if (!userEmail.trim()) {
       Alert.alert('Error', 'Please enter your email address');
@@ -334,15 +326,11 @@ export default function PaywallScreen({
       
       // Persist user email
       await setUserEmail(userEmail);
-      console.log('[Stripe] User email persisted:', userEmail);
+      console.debug('[Stripe] User email persisted:', userEmail);
       
-      // Determine success/cancel URLs based on platform
-      const successUrl = Platform.OS === 'web' 
-        ? `${WEB_ORIGIN}/purchase/success` 
-        : 'formai://purchase/success';
-      const cancelUrl = Platform.OS === 'web' 
-        ? `${WEB_ORIGIN}/purchase/cancel` 
-        : 'formai://purchase/cancel';
+      // Use web URLs derived from WEB_ORIGIN
+      const successUrl = `${WEB_ORIGIN}/purchase/success`;
+      const cancelUrl = `${WEB_ORIGIN}/purchase/cancel`;
       
       const payload = { 
         priceId, 
@@ -352,33 +340,27 @@ export default function PaywallScreen({
         cancelUrl 
       };
       
-      console.log('[Paywall] Platform:', Platform.OS, 'WEB_ORIGIN:', WEB_ORIGIN);
-      console.log('[Stripe] createCheckout payload:', payload);
+      console.debug('[Paywall] WEB_ORIGIN:', WEB_ORIGIN);
+      console.debug('[Stripe] createCheckout payload:', payload);
       
       const res = await createCheckout(payload);
       
-      console.log('[Stripe] checkout response:', res);
+      console.debug('[Stripe] checkout response:', res);
       
       if (!res.url) {
         Alert.alert('Error', 'Backend did not return a checkout URL');
         return;
       }
       
-      console.log('[Stripe] success url:', res.url);
+      console.debug('[Stripe] success url:', res.url);
       
-      // Handle checkout URL based on platform
-      if (Platform.OS === 'web') {
-        // For web, redirect directly
-        window.location.href = res.url;
-      } else {
-        // For native, use WebBrowser
-        try {
-          const result = await WebBrowser.openBrowserAsync(res.url);
-          console.log('[Stripe] WebBrowser result:', result);
-        } catch (e) {
-          console.error('[Stripe] WebBrowser error:', e);
-          Alert.alert('Error', 'Could not open checkout in browser');
-        }
+      // Open checkout with WebBrowser
+      try {
+        const result = await WebBrowser.openBrowserAsync(res.url);
+        console.debug('[Stripe] WebBrowser result:', result);
+      } catch (e) {
+        console.error('[Stripe] WebBrowser error:', e);
+        Alert.alert('Error', 'Could not open checkout in browser');
       }
     } catch (err) {
       console.error('[Stripe] subscribe error:', err);
@@ -549,7 +531,7 @@ export default function PaywallScreen({
                 <TouchableOpacity
                   style={[styles.button, styles.stripeButton]}
                   onPress={() => handleStripeSubscribe('monthly')}
-                  disabled={!monthlyId || stripeLoading || !userEmail.trim()}
+                  disabled={!canSubscribe || stripeLoading}
                 >
                   {stripeLoading ? (
                     <ActivityIndicator color="#ffffff" />
@@ -564,7 +546,7 @@ export default function PaywallScreen({
                 <TouchableOpacity
                   style={[styles.button, styles.stripeButton]}
                   onPress={() => handleStripeSubscribe('annual')}
-                  disabled={!annualId || stripeLoading || !userEmail.trim()}
+                  disabled={!canSubscribe || stripeLoading}
                 >
                   {stripeLoading ? (
                     <ActivityIndicator color="#ffffff" />
@@ -575,19 +557,6 @@ export default function PaywallScreen({
                     </>
                   )}
                 </TouchableOpacity>
-              </View>
-
-              {/* Stripe Status */}
-              <View style={styles.statusContainer}>
-                <Text style={styles.statusText}>
-                  Stripe Status: {stripeLoading ? 'Loading...' : 'Ready'}
-                </Text>
-                <Text style={styles.statusText}>
-                  Monthly: {monthlyId ? '✅ Configured' : '❌ Not configured'}
-                </Text>
-                <Text style={styles.statusText}>
-                  Annual: {annualId ? '✅ Configured' : '❌ Not configured'}
-                </Text>
               </View>
             </Animated.View>
 

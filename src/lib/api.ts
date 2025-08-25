@@ -1,7 +1,8 @@
-// Centralized API base URL with fallback
-export const API_BASE =
-  (process.env.EXPO_PUBLIC_API_BASE?.trim()) ||
-  'https://formai-backend-dc3u.onrender.com'; // fallback
+// Environment variables and constants
+export const API_BASE = process.env.EXPO_PUBLIC_API_BASE!;
+export const ENV_MONTHLY = process.env.EXPO_PUBLIC_STRIPE_PRICE_ID_MONTHLY || "";
+export const ENV_ANNUAL = process.env.EXPO_PUBLIC_STRIPE_PRICE_ID_ANNUAL || "";
+export const WEB_ORIGIN = process.env.EXPO_PUBLIC_WEB_ORIGIN || (typeof window !== "undefined" ? window.location.origin : "");
 
 // Helper function to build full URLs
 function url(path: string) {
@@ -10,12 +11,12 @@ function url(path: string) {
 
 // API health check and startup assertion
 export async function assertApiReachable() {
-  console.log('[Paywall] API_BASE =', API_BASE);
+  console.debug('[Paywall] API_BASE =', API_BASE);
   try {
     const r = await fetch(url('/api/health'));
     if (!r.ok) throw new Error(`health ${r.status}`);
     const data = await r.json();
-    console.log('[Paywall] /api/health OK', data);
+    console.debug('[Paywall] /api/health OK', data);
     return true;
   } catch (e) {
     console.error('[Paywall] API not reachable:', e);
@@ -31,14 +32,21 @@ export async function getProducts() {
       throw new Error(`HTTP ${r.status}: ${r.statusText}`);
     }
     const j = await r.json();
+    
+    // Check for MISSING_PRICE_IDS error
+    if (j.error === "MISSING_PRICE_IDS") {
+      console.warn('[API] Products endpoint returned MISSING_PRICE_IDS, using env fallback');
+      throw new Error("MISSING_PRICE_IDS");
+    }
+    
     return j.data || [];
   } catch (error) {
-    console.warn('[API] Products fetch failed, using fallback env prices:', error);
-    // Return fallback structure with flag
+    console.error('[API] Products fetch failed, using fallback env prices:', error);
+    // Return fallback structure using ENV constants
     return {
       usingFallback: true,
-      monthly: process.env.EXPO_PUBLIC_STRIPE_PRICE_ID_MONTHLY,
-      annual: process.env.EXPO_PUBLIC_STRIPE_PRICE_ID_ANNUAL
+      monthly: ENV_MONTHLY || null,
+      annual: ENV_ANNUAL || null
     };
   }
 }
@@ -50,7 +58,7 @@ export async function createCheckout(payload: {
   successUrl: string;
   cancelUrl: string;
 }): Promise<{ url: string }> {
-  console.log('[Stripe] createCheckout request:', payload);
+  console.debug('[Stripe] createCheckout request:', payload);
   
   try {
     const r = await fetch(url('/api/create-checkout-session'), {
@@ -65,7 +73,7 @@ export async function createCheckout(payload: {
       })
     });
     
-    console.log('[Stripe] createCheckout response status:', r.status);
+    console.debug('[Stripe] createCheckout response status:', r.status);
     
     if (!r.ok) {
       const errorBody = await r.text();
@@ -74,7 +82,7 @@ export async function createCheckout(payload: {
     }
     
     const j = await r.json();
-    console.log('[Stripe] createCheckout success response:', j);
+    console.debug('[Stripe] createCheckout success response:', j);
     
     if (!j?.url) {
       throw new Error("No checkout URL returned from backend");
