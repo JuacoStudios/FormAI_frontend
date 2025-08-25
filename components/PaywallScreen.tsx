@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -9,10 +9,12 @@ import {
   Platform,
   ActivityIndicator,
   SafeAreaView,
+  Alert,
+  TextInput,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
-import { X, Clock as Unlock, Image as ImageIcon, Zap, Star } from 'lucide-react-native';
+import { X, Clock as Unlock, Image as ImageIcon, Zap, Star, CreditCard } from 'lucide-react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -25,9 +27,15 @@ import Animated, {
   ZoomIn,
 } from 'react-native-reanimated';
 import * as WebBrowser from 'expo-web-browser';
-import { createCheckout, getProducts, createStripeCheckout, getStripePrices } from '../src/lib/api';
+import { createCheckout, getProducts, API_BASE, getSubscriptionStatus, assertApiReachable } from '../src/lib/api';
+import { getIdentity, setUserEmail } from '../src/lib/identity';
 
 const { width, height } = Dimensions.get('window');
+
+// Calculate web origin for dynamic URLs
+const WEB_ORIGIN = Platform.OS === 'web' 
+  ? (process.env.EXPO_PUBLIC_WEB_ORIGIN || (typeof window !== 'undefined' ? window.location.origin : ''))
+  : '';
 
 interface PricingOption {
   id: string;
@@ -98,16 +106,25 @@ export default function PaywallScreen({
   onPrivacy,
   loading = false,
 }: PaywallProps) {
+  // ALL HOOKS MUST BE DECLARED FIRST, BEFORE ANY CONDITIONAL LOGIC
+  
+  // State hooks
   const [selectedOption, setSelectedOption] = useState('annual');
   const [purchasing, setPurchasing] = useState(false);
   const [products, setProducts] = useState<any[]>([]);
   const [productsLoading, setProductsLoading] = useState(true);
-  const [stripePrices, setStripePrices] = useState<any>(null);
-  const [stripePricesLoading, setStripePricesLoading] = useState(true);
+  const [stripeLoading, setStripeLoading] = useState(false);
+  const [userEmail, setUserEmail] = useState('');
+  const [userId, setUserId] = useState<string>('');
+  const [monthlyId, setMonthlyId] = useState<string>('');
+  const [annualId, setAnnualId] = useState<string>('');
+  const [usingFallback, setUsingFallback] = useState(false);
   
+  // Animation hooks
   const pulseAnimation = useSharedValue(1);
   const glowAnimation = useSharedValue(0);
 
+  // Effect hooks
   useEffect(() => {
     if (visible) {
       pulseAnimation.value = withRepeat(
@@ -121,52 +138,124 @@ export default function PaywallScreen({
         true
       );
     }
-  }, [visible]);
+  }, [visible, pulseAnimation, glowAnimation]);
 
+  // Initialize identity on mount
   useEffect(() => {
-    async function loadProducts() {
+    const initIdentity = async () => {
       try {
-        const data = await getProducts();
-        setProducts(data);
+        const identity = await getIdentity();
+        setUserId(identity.userId);
+        if (identity.email) {
+          setUserEmail(identity.email);
+        }
+        console.log('[Paywall] Identity initialized:', identity);
         
-        // Map products to pricing options
-        const updatedPricingOptions = pricingOptions.map(option => {
-          const product = data.find((p: any) => 
-            p.name.toLowerCase().includes(option.id.toLowerCase())
-          );
-          return {
-            ...option,
-            variantId: product?.variantId
-          };
-        });
-        
-        // Update pricing options with variant IDs
-        pricingOptions.splice(0, pricingOptions.length, ...updatedPricingOptions);
-        
-      } catch (err) {
-        console.error('Failed to load products:', err);
-        setProducts([]);
-      } finally {
-        setProductsLoading(false);
+        // Check subscription status
+        if (identity.userId) {
+          try {
+            const status = await getSubscriptionStatus(identity.userId);
+            console.log('[Paywall] Subscription status:', status);
+            if (status.active) {
+              console.log('[Paywall] User is premium, closing paywall');
+              onClose();
+            }
+          } catch (error) {
+            console.warn('[Paywall] Error checking subscription status:', error);
+          }
+        }
+      } catch (error) {
+        console.error('[Paywall] Error initializing identity:', error);
       }
-    }
+    };
     
-    async function loadStripePrices() {
-      try {
-        const data = await getStripePrices();
-        setStripePrices(data);
-      } catch (err) {
-        console.error('Failed to load Stripe prices:', err);
-        setStripePrices(null);
-      } finally {
-        setStripePricesLoading(false);
-      }
-    }
+    initIdentity();
+  }, [onClose]);
+
+  // API health check and preload Stripe prices on mount
+  useEffect(() => {
+    const initializeApi = async () => {
+      // Check API reachability
+      await assertApiReachable();
+      
+      // Preload Stripe prices
+      await preloadStripePrices();
+    };
     
-    loadProducts();
-    loadStripePrices();
+    initializeApi();
   }, []);
 
+  // Preload Stripe prices function
+  const preloadStripePrices = async () => {
+    try {
+      setProductsLoading(true);
+      const data = await getProducts();
+      console.log('[Paywall] Products loaded:', data);
+      
+      if (data.usingFallback) {
+        // Using environment fallback
+        setUsingFallback(true);
+        const monthly = process.env.EXPO_PUBLIC_STRIPE_PRICE_ID_MONTHLY || '';
+        const annual = process.env.EXPO_PUBLIC_STRIPE_PRICE_ID_ANNUAL || '';
+        
+        setMonthlyId(monthly);
+        setAnnualId(annual);
+        
+        console.log('[Paywall] Using fallback env prices:', { monthly, annual });
+        
+        if (!monthly || !annual) {
+          console.warn('[Paywall] Missing environment price IDs');
+        }
+      } else {
+        // Using API products
+        setUsingFallback(false);
+        setProducts(data);
+        
+        // Extract price IDs from products if available
+        const monthly = data.find((p: any) => p.name?.toLowerCase().includes('monthly'))?.variantId || '';
+        const annual = data.find((p: any) => p.name?.toLowerCase().includes('annual'))?.variantId || '';
+        
+        setMonthlyId(monthly);
+        setAnnualId(annual);
+        
+        console.log('[Paywall] Using API prices:', { monthly, annual });
+      }
+      
+    } catch (err) {
+      console.error('Failed to load products:', err);
+      setProducts([]);
+      setUsingFallback(true);
+      
+      // Fallback to environment variables
+      const monthly = process.env.EXPO_PUBLIC_STRIPE_PRICE_ID_MONTHLY || '';
+      const annual = process.env.EXPO_PUBLIC_STRIPE_PRICE_ID_ANNUAL || '';
+      
+      setMonthlyId(monthly);
+      setAnnualId(annual);
+      
+      console.log('[Paywall] Fallback to env prices after error:', { monthly, annual });
+    } finally {
+      setProductsLoading(false);
+    }
+  };
+
+  // Compute subscription availability
+  useEffect(() => {
+    const hasPrices = Boolean(monthlyId && annualId);
+    const hasEmail = userEmail.trim().length > 0;
+    const canSub = hasPrices && hasEmail;
+    
+    // console.log('[Paywall] Subscription availability computed:', {
+    //   hasPrices,
+    //   hasEmail,
+    //   canSubscribe: canSub,
+    //   priceMonthly: !!priceMonthly,
+    //   priceAnnual: !!priceAnnual,
+    //   userEmail: userEmail.trim().length
+    // });
+  }, [monthlyId, annualId, userEmail]);
+
+  // Animation style hooks
   const animatedPulseStyle = useAnimatedStyle(() => {
     return {
       transform: [{ scale: pulseAnimation.value }],
@@ -179,7 +268,8 @@ export default function PaywallScreen({
     };
   });
 
-  const handlePurchase = async () => {
+  // Callback hooks
+  const handlePurchase = useCallback(async () => {
     const selectedPlan = pricingOptions.find(option => option.id === selectedOption);
     if (!selectedPlan?.variantId) {
       alert('No hay productos disponibles para comprar.');
@@ -191,12 +281,18 @@ export default function PaywallScreen({
       console.log(`🛒 Iniciando compra para: ${selectedPlan.title} (${selectedPlan.variantId})`);
       
       // Create checkout with Lemon Squeezy
-      const checkoutUrl = await createCheckout(selectedPlan.variantId);
+      const checkoutResult = await createCheckout({ 
+        priceId: selectedPlan.variantId,
+        customerEmail: userEmail,
+        userId: userId,
+        successUrl: 'formai://purchase/success',
+        cancelUrl: 'formai://purchase/cancel'
+      });
       
-      console.log('✅ Checkout creado exitosamente:', checkoutUrl);
+      console.log('✅ Checkout creado exitosamente:', checkoutResult.url);
       
       // Open checkout in browser
-      await WebBrowser.openBrowserAsync(checkoutUrl);
+      await WebBrowser.openBrowserAsync(checkoutResult.url);
       
       // Call onPurchase callback
       if (onPurchase) {
@@ -214,43 +310,104 @@ export default function PaywallScreen({
     } finally {
       setPurchasing(false);
     }
-  };
+  }, [selectedOption, userEmail, userId, onPurchase]);
 
   // STRIPE: Handle Stripe subscription
-  const handleStripeSubscribe = async (priceId: string, email?: string) => {
-    setPurchasing(true);
+  const handleStripeSubscribe = useCallback(async (plan: 'monthly' | 'annual') => {
+    console.log(`[Stripe] Subscribe ${plan} pressed`);
+    
+    if (!userEmail.trim()) {
+      Alert.alert('Error', 'Please enter your email address');
+      return;
+    }
+    
+    const priceId = plan === 'monthly' ? monthlyId : annualId;
+    
+    if (!priceId) {
+      console.warn('[Stripe] missing priceId for', plan);
+      Alert.alert('Error', 'No Stripe priceId available. Check configuration.');
+      return;
+    }
+    
     try {
-      console.log(`💳 Iniciando suscripción Stripe para: ${priceId}`);
+      setStripeLoading(true);
       
-      const url = await createStripeCheckout(priceId, email);
-      console.log('✅ Stripe checkout creado exitosamente:', url);
+      // Persist user email
+      await setUserEmail(userEmail);
+      console.log('[Stripe] User email persisted:', userEmail);
       
-      await WebBrowser.openBrowserAsync(url);
+      // Determine success/cancel URLs based on platform
+      const successUrl = Platform.OS === 'web' 
+        ? `${WEB_ORIGIN}/purchase/success` 
+        : 'formai://purchase/success';
+      const cancelUrl = Platform.OS === 'web' 
+        ? `${WEB_ORIGIN}/purchase/cancel` 
+        : 'formai://purchase/cancel';
       
-      // Call onPurchase callback
-      if (onPurchase) {
-        await onPurchase(priceId);
+      const payload = { 
+        priceId, 
+        customerEmail: userEmail, 
+        userId: userId, 
+        successUrl, 
+        cancelUrl 
+      };
+      
+      console.log('[Paywall] Platform:', Platform.OS, 'WEB_ORIGIN:', WEB_ORIGIN);
+      console.log('[Stripe] createCheckout payload:', payload);
+      
+      const res = await createCheckout(payload);
+      
+      console.log('[Stripe] checkout response:', res);
+      
+      if (!res.url) {
+        Alert.alert('Error', 'Backend did not return a checkout URL');
+        return;
       }
       
-    } catch (error: any) {
-      console.error('❌ Error en suscripción Stripe:', error);
-      alert('Error al crear la sesión de pago de Stripe. Intenta de nuevo.');
+      console.log('[Stripe] success url:', res.url);
+      
+      // Handle checkout URL based on platform
+      if (Platform.OS === 'web') {
+        // For web, redirect directly
+        window.location.href = res.url;
+      } else {
+        // For native, use WebBrowser
+        try {
+          const result = await WebBrowser.openBrowserAsync(res.url);
+          console.log('[Stripe] WebBrowser result:', result);
+        } catch (e) {
+          console.error('[Stripe] WebBrowser error:', e);
+          Alert.alert('Error', 'Could not open checkout in browser');
+        }
+      }
+    } catch (err) {
+      console.error('[Stripe] subscribe error:', err);
+      Alert.alert('Error', 'Error creating Stripe checkout session. Check console for details.');
     } finally {
-      setPurchasing(false);
+      setStripeLoading(false);
     }
-  };
+  }, [monthlyId, annualId, userEmail, userId, WEB_ORIGIN]);
 
-  const handleRestore = async () => {
+  const handleRestore = useCallback(async () => {
     try {
       await onRestore();
     } catch (error) {
       console.error('Restore failed:', error);
     }
-  };
+  }, [onRestore]);
 
-  if (!visible) return null;
+  // Memoized computed values
+  const selectedPlan = useMemo(() => 
+    pricingOptions.find(option => option.id === selectedOption), 
+    [selectedOption]
+  );
 
-  const selectedPlan = pricingOptions.find(option => option.id === selectedOption);
+  // RENDER LOGIC - NO MORE HOOKS AFTER THIS POINT
+  
+  // Early return check - but all hooks have been declared above
+  if (!visible) {
+    return null;
+  }
 
   return (
     <View style={styles.overlay}>
@@ -345,143 +502,94 @@ export default function PaywallScreen({
                         )}
                       </View>
                     </View>
-
+                    
                     <View style={styles.pricingContent}>
                       <Text style={styles.pricingTitle}>{option.title}</Text>
-                      {option.savings && (
+                      <View style={styles.priceContainer}>
+                        <Text style={styles.price}>{option.price}</Text>
+                        <Text style={styles.period}>{option.period}</Text>
+                      </View>
+                      {option.originalPrice && (
                         <Text style={styles.savingsText}>{option.savings}</Text>
                       )}
-                    </View>
-
-                    <View style={styles.priceContainer}>
-                      <Text style={styles.price}>{option.price}</Text>
-                      <Text style={styles.period}>{option.period}</Text>
                     </View>
                   </TouchableOpacity>
                 </Animated.View>
               ))}
             </Animated.View>
 
-            {/* Trial Info */}
+            {/* STRIPE: Stripe Subscription Section */}
             <Animated.View 
-              entering={FadeIn.delay(1200)}
-              style={styles.trialInfo}
+              entering={SlideInUp.delay(1100)}
+              style={styles.stripeSection}
             >
-              <Text style={styles.trialText}>
-                Try 7 days for free. Cancel anytime.
-              </Text>
+              <View style={styles.sectionHeader}>
+                <CreditCard size={24} color="#00e676" />
+                <Text style={styles.sectionTitle}>Stripe Subscription</Text>
+              </View>
+
+              {/* Email Input */}
+
+              {/* Email Input */}
+              <View style={styles.emailSection}>
+                <Text style={styles.emailLabel}>Email for subscription:</Text>
+                <TextInput
+                  style={styles.emailInput}
+                  placeholder="Enter your email"
+                  placeholderTextColor="#666"
+                  value={userEmail}
+                  onChangeText={setUserEmail}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+              </View>
+
+              <View style={styles.buttonContainer}>
+                <TouchableOpacity
+                  style={[styles.button, styles.stripeButton]}
+                  onPress={() => handleStripeSubscribe('monthly')}
+                  disabled={!monthlyId || stripeLoading || !userEmail.trim()}
+                >
+                  {stripeLoading ? (
+                    <ActivityIndicator color="#ffffff" />
+                  ) : (
+                    <>
+                      <CreditCard size={20} color="#ffffff" />
+                      <Text style={styles.buttonText}>Subscribe Monthly (Stripe)</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.button, styles.stripeButton]}
+                  onPress={() => handleStripeSubscribe('annual')}
+                  disabled={!annualId || stripeLoading || !userEmail.trim()}
+                >
+                  {stripeLoading ? (
+                    <ActivityIndicator color="#ffffff" />
+                  ) : (
+                    <>
+                      <CreditCard size={20} color="#ffffff" />
+                      <Text style={styles.buttonText}>Subscribe Annual (Stripe)</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
+
+              {/* Stripe Status */}
+              <View style={styles.statusContainer}>
+                <Text style={styles.statusText}>
+                  Stripe Status: {stripeLoading ? 'Loading...' : 'Ready'}
+                </Text>
+                <Text style={styles.statusText}>
+                  Monthly: {monthlyId ? '✅ Configured' : '❌ Not configured'}
+                </Text>
+                <Text style={styles.statusText}>
+                  Annual: {annualId ? '✅ Configured' : '❌ Not configured'}
+                </Text>
+              </View>
             </Animated.View>
-
-            {/* Lemon Squeezy Products Debug Info */}
-            {productsLoading ? (
-              <View style={{ marginVertical: 20, alignItems: 'center' }}>
-                <ActivityIndicator size="large" color="#00e676" />
-                <Text style={{ color: 'white', textAlign: 'center', marginTop: 12 }}>Cargando planes...</Text>
-              </View>
-            ) : products.length === 0 ? (
-              <View style={{ marginVertical: 20, alignItems: 'center' }}>
-                <Text style={{ color: '#ff6b6b', textAlign: 'center', marginBottom: 8, fontWeight: 'bold' }}>
-                  ❌ No products available right now
-                </Text>
-                <Text style={{ color: '#aaa', textAlign: 'center', fontSize: 12, marginBottom: 8 }}>
-                  Check console for API errors
-                </Text>
-                <Text style={{ color: '#666', textAlign: 'center', fontSize: 10 }}>
-                  Verify backend is running and products are configured
-                </Text>
-              </View>
-            ) : (
-              <View style={{ marginVertical: 20, alignItems: 'center' }}>
-                <Text style={{ color: '#00e676', textAlign: 'center', marginBottom: 12, fontWeight: 'bold' }}>
-                  🍋 Lemon Squeezy Products Loaded
-                </Text>
-                {products.map((product: any) => (
-                  <View key={product.id} style={{ backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 12, padding: 16, marginBottom: 12, width: '100%' }}>
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                      <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 16 }}>{product.name}</Text>
-                      <View style={{ backgroundColor: '#FF6B35', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 }}>
-                        <Text style={{ color: 'white', fontSize: 10, fontWeight: 'bold' }}>LEMON</Text>
-                      </View>
-                    </View>
-                    <Text style={{ color: '#aaa', marginBottom: 4, fontSize: 12 }}>{product.description}</Text>
-                    <Text style={{ color: '#00e676', fontWeight: 'bold', fontSize: 14, marginBottom: 4 }}>{product.price_formatted}</Text>
-                    <View style={{ backgroundColor: 'rgba(0,0,0,0.2)', padding: 8, borderRadius: 6 }}>
-                      <Text style={{ color: '#666', fontSize: 10, fontFamily: 'monospace' }}>
-                        Product ID: {product.id}
-                      </Text>
-                      <Text style={{ color: '#666', fontSize: 10, fontFamily: 'monospace' }}>
-                        Variant ID: {product.variantId}
-                      </Text>
-                    </View>
-                  </View>
-                ))}
-                
-                {/* Configuration Status */}
-                <View style={{ backgroundColor: 'rgba(255,107,53,0.1)', borderRadius: 12, padding: 16, width: '100%', borderWidth: 1, borderColor: 'rgba(255,107,53,0.3)' }}>
-                  <Text style={{ color: '#FF6B35', textAlign: 'center', fontWeight: 'bold', marginBottom: 8 }}>
-                    🍋 Lemon Squeezy Status
-                  </Text>
-                  <Text style={{ color: '#FF6B35', fontSize: 12, textAlign: 'center' }}>
-                    Products: {products.length > 0 ? '✅' : '❌'} | API: Connected
-                  </Text>
-                </View>
-              </View>
-            )}
-
-            {/* STRIPE: Stripe Integration Section */}
-            {stripePricesLoading ? (
-              <View style={{ marginVertical: 20, alignItems: 'center' }}>
-                <ActivityIndicator size="large" color="#6772e5" />
-                <Text style={{ color: 'white', textAlign: 'center', marginTop: 12 }}>Cargando Stripe...</Text>
-              </View>
-            ) : stripePrices ? (
-              <View style={{ marginVertical: 20, alignItems: 'center' }}>
-                <Text style={{ color: '#6772e5', textAlign: 'center', marginBottom: 12, fontWeight: 'bold' }}>
-                  💳 Stripe Integration Available
-                </Text>
-                
-                {/* Stripe Monthly Button */}
-                {stripePrices.monthly === 'configured' && (
-                  <TouchableOpacity
-                    style={[styles.stripeButton, { backgroundColor: '#6772e5' }]}
-                    onPress={() => handleStripeSubscribe(process.env.EXPO_PUBLIC_STRIPE_PRICE_ID_MONTHLY || '')}
-                    disabled={purchasing}
-                  >
-                    <Text style={styles.stripeButtonText}>Subscribe Monthly (Stripe)</Text>
-                  </TouchableOpacity>
-                )}
-                
-                {/* Stripe Annual Button */}
-                {stripePrices.annual === 'configured' && (
-                  <TouchableOpacity
-                    style={[styles.stripeButton, { backgroundColor: '#6772e5' }]}
-                    onPress={() => handleStripeSubscribe(process.env.EXPO_PUBLIC_STRIPE_PRICE_ID_ANNUAL || '')}
-                    disabled={purchasing}
-                  >
-                    <Text style={styles.stripeButtonText}>Subscribe Annual (Stripe)</Text>
-                  </TouchableOpacity>
-                )}
-                
-                {/* Stripe Status */}
-                <View style={{ backgroundColor: 'rgba(103,114,229,0.1)', borderRadius: 12, padding: 16, width: '100%', borderWidth: 1, borderColor: 'rgba(103,114,229,0.3)', marginTop: 16 }}>
-                  <Text style={{ color: '#6772e5', textAlign: 'center', fontWeight: 'bold', marginBottom: 8 }}>
-                    💳 Stripe Status
-                  </Text>
-                  <Text style={{ color: '#6772e5', fontSize: 12, textAlign: 'center' }}>
-                    Monthly: {stripePrices.monthly === 'configured' ? '✅' : '❌'} | Annual: {stripePrices.annual === 'configured' ? '✅' : '❌'}
-                  </Text>
-                </View>
-              </View>
-            ) : (
-              <View style={{ marginVertical: 20, alignItems: 'center' }}>
-                <Text style={{ color: '#ff6b6b', textAlign: 'center', marginBottom: 8, fontWeight: 'bold' }}>
-                  ❌ Stripe not available
-                </Text>
-                <Text style={{ color: '#aaa', textAlign: 'center', fontSize: 12 }}>
-                  Stripe integration not configured
-                </Text>
-              </View>
-            )}
 
             {/* Purchase Button */}
             <Animated.View 
@@ -522,7 +630,9 @@ export default function PaywallScreen({
                 <TouchableOpacity onPress={onTerms} style={styles.footerButton}>
                   <Text style={styles.footerLink}>Terms</Text>
                 </TouchableOpacity>
-                <Text style={styles.footerSeparatorText}> & </Text>
+                
+                <View style={styles.separatorDot} />
+                
                 <TouchableOpacity onPress={onPrivacy} style={styles.footerButton}>
                   <Text style={styles.footerLink}>Privacy</Text>
                 </TouchableOpacity>
@@ -634,6 +744,28 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 16,
+  },
+  emailSection: {
+    marginBottom: 24,
+    paddingHorizontal: 20,
+  },
+  emailLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  emailInput: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 16,
+    color: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 230, 118, 0.3)',
+    textAlign: 'center',
   },
   featureText: {
     fontSize: 16,
@@ -811,4 +943,85 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#FFFFFF',
   },
+  section: {
+    marginBottom: 32,
+    paddingHorizontal: 20,
+  },
+  sectionTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  diagnosticsContainer: {
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  diagnosticsTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    marginBottom: 8,
+  },
+  diagnosticsText: {
+    fontSize: 14,
+    color: '#AAAAAA',
+    marginBottom: 4,
+  },
+  button: {
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    marginBottom: 12,
+    shadowColor: '#6772e5',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  buttonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginLeft: 10,
+  },
+  statusContainer: {
+    backgroundColor: 'rgba(103,114,229,0.1)',
+    borderRadius: 12,
+    padding: 16,
+    width: '100%',
+    borderWidth: 1,
+    borderColor: 'rgba(103,114,229,0.3)',
+  },
+  statusText: {
+    fontSize: 14,
+    color: '#6772e5',
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  stripeSection: {
+    marginBottom: 32,
+    paddingHorizontal: 20,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  separatorDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#888888',
+    marginHorizontal: 8,
+  },
+
 });
