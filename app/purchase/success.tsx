@@ -1,11 +1,51 @@
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
+import { useEffect, useState } from "react";
 import { useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import { CheckCircle, Home, RefreshCw } from "lucide-react-native";
+import { getIdentity } from "../../src/lib/identity";
+import { getSubscriptionStatus } from "../../src/lib/api";
 
 export default function PurchaseSuccess() {
   const router = useRouter();
+  const [isPremium, setIsPremium] = useState(false);
+  const [loading, setLoading] = useState(true);
   
+  // Auto-check subscription status when component mounts
+  useEffect(() => {
+    const checkSubscriptionStatus = async () => {
+      try {
+        setLoading(true);
+        const identity = await getIdentity();
+        if (identity.userId) {
+          console.log('[Stripe] Checking subscription status for userId:', identity.userId);
+          const status = await getSubscriptionStatus(identity.userId);
+          console.log('[Stripe] Subscription status received:', status);
+          setIsPremium(status.active || false);
+        } else {
+          console.log('[Stripe] No userId found, cannot check subscription status');
+        }
+      } catch (error) {
+        console.error('[Stripe] Error checking subscription status:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    checkSubscriptionStatus();
+  }, []);
+  
+  // Auto-navigate to main screen if premium
+  useEffect(() => {
+    if (isPremium && !loading) {
+      console.log('[Stripe] Subscription confirmed! Navigating to main screen.');
+      const timer = setTimeout(() => {
+        router.replace('/(tabs)');
+      }, 2000); // Navigate after 2 seconds
+      return () => clearTimeout(timer);
+    }
+  }, [isPremium, loading, router]);
+
   return (
     <View style={styles.container}>
       <LinearGradient
@@ -20,12 +60,15 @@ export default function PurchaseSuccess() {
         
         <Text style={styles.title}>✅ Payment Completed!</Text>
         <Text style={styles.subtitle}>
-          Your subscription will activate shortly. If you don't see PRO yet, pull to refresh on the Account screen.
+          {isPremium 
+            ? "Your subscription is now active! Redirecting to main screen..." 
+            : "Your subscription will activate shortly. If you don't see PRO yet, pull to refresh on the Account screen."
+          }
         </Text>
         
         <View style={styles.buttonContainer}>
           <TouchableOpacity 
-            onPress={() => router.replace("/")} 
+            onPress={() => router.replace("/(tabs)")} 
             style={styles.primaryButton}
           >
             <Home size={20} color="#ffffff" />
@@ -37,7 +80,7 @@ export default function PurchaseSuccess() {
             style={styles.secondaryButton}
           >
             <RefreshCw size={20} color="#00e676" />
-            <Text style={styles.secondaryButtonText}>Check Profile</Text>
+            <Text style={styles.primaryButtonText}>Check Profile</Text>
           </TouchableOpacity>
         </View>
       </LinearGradient>
