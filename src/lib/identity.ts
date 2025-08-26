@@ -4,7 +4,7 @@ const KEY = "formai:userId";
 const EMAIL_KEY = "formai:userEmail";
 
 export function getIdentity() {
-  if (typeof window === "undefined") return { userId: "server-render" };
+  if (typeof window === "undefined") return { userId: "server-render", email: "" };
   let id = window.localStorage.getItem(KEY);
   if (!id) {
     id = uuidv4();

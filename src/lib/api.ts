@@ -26,25 +26,24 @@ export async function assertApiReachable() {
 
 export async function getProducts() {
   try {
-    const r = await fetch(url('/api/products'));
+    const r = await fetch(url('/api/stripe/products'));
     if (!r.ok) {
-      console.warn('[API] Products endpoint failed:', r.status, r.statusText);
+      console.warn('[API] Stripe products endpoint failed:', r.status, r.statusText);
       throw new Error(`HTTP ${r.status}: ${r.statusText}`);
     }
     const j = await r.json();
     
     // Check for MISSING_PRICE_IDS error
     if (j.error === "MISSING_PRICE_IDS") {
-      console.warn('[API] Products endpoint returned MISSING_PRICE_IDS, using env fallback');
+      console.warn('[API] Stripe products endpoint returned MISSING_PRICE_IDS, using env fallback');
       throw new Error("MISSING_PRICE_IDS");
     }
     
-    return j.data || [];
+    return j;
   } catch (error) {
-    console.error('[API] Products fetch failed, using fallback env prices:', error);
+    console.error('[API] Stripe products fetch failed, using fallback env prices:', error);
     // Return fallback structure using ENV constants
     return {
-      usingFallback: true,
       monthly: ENV_MONTHLY || null,
       annual: ENV_ANNUAL || null
     };

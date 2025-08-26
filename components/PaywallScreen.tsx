@@ -188,7 +188,14 @@ export default function PaywallScreen({
       const data = await getProducts();
       console.debug('[Paywall] Products loaded:', data);
       
-      if (data.usingFallback) {
+      if (data.monthly && data.annual) {
+        // Using API products
+        setUsingFallback(false);
+        setMonthlyId(data.monthly.id || '');
+        setAnnualId(data.annual.id || '');
+        
+        console.debug('[Paywall] Using API prices:', { monthly: data.monthly.id, annual: data.annual.id });
+      } else {
         // Using environment fallback
         setUsingFallback(true);
         setMonthlyId(data.monthly || '');
@@ -199,19 +206,6 @@ export default function PaywallScreen({
         if (!data.monthly || !data.annual) {
           console.warn('[Paywall] Missing environment price IDs');
         }
-      } else {
-        // Using API products
-        setUsingFallback(false);
-        setProducts(data);
-        
-        // Extract price IDs from products if available
-        const monthly = data.find((p: any) => p.name?.toLowerCase().includes('monthly'))?.variantId || '';
-        const annual = data.find((p: any) => p.name?.toLowerCase().includes('annual'))?.variantId || '';
-        
-        setMonthlyId(monthly);
-        setAnnualId(annual);
-        
-        console.debug('[Paywall] Using API prices:', { monthly, annual });
       }
       
     } catch (err) {
