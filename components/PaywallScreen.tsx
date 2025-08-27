@@ -177,9 +177,23 @@ export default function PaywallScreen({
       console.debug('[Paywall] ENV_ANNUAL:', ENV_ANNUAL ? 'present' : 'missing');
       console.debug('[Paywall] WEB_ORIGIN:', WEB_ORIGIN);
       
+      // Defensive check for API_BASE
+      if (!API_BASE || API_BASE.includes("undefined")) {
+        console.error('[Paywall] Invalid API_BASE detected:', API_BASE);
+        console.error('[Paywall] Environment variable EXPO_PUBLIC_API_BASE:', process.env.EXPO_PUBLIC_API_BASE);
+        setCanSubscribe(false);
+        return;
+      }
+      
       // Check API reachability
       const apiReachable = await assertApiReachable();
       console.debug('[Paywall] API reachable:', apiReachable);
+      
+      if (!apiReachable) {
+        console.warn('[Paywall] API not reachable, enabling fallback mode');
+        setCanSubscribe(false);
+        return;
+      }
       
       // Preload Stripe prices
       await preloadStripePrices();
@@ -307,20 +321,34 @@ export default function PaywallScreen({
 
   // STRIPE: Handle Stripe subscription
   const handleStripeSubscribe = useCallback(async (plan: 'monthly' | 'annual') => {
-    console.debug(`[Stripe] Subscribe ${plan} pressed`);
+    console.debug(`[Stripe] CLICK ${plan} button pressed`);
+    console.debug(`[Stripe] Plan: ${plan}, userId: ${userId}, email: ${userEmail}`);
+    console.debug(`[Stripe] API_BASE: ${API_BASE}`);
+    
+    // Defensive check for API_BASE
+    if (!API_BASE || API_BASE.includes("undefined")) {
+      console.error('[Stripe] Invalid API_BASE detected:', API_BASE);
+      Alert.alert('Error', 'API configuration error. Please check console for details.');
+      return;
+    }
     
     if (!userEmail.trim()) {
+      console.debug('[Stripe] Button click blocked: no email entered');
       Alert.alert('Error', 'Please enter your email address');
       return;
     }
     
     const priceId = plan === 'monthly' ? monthlyId : annualId;
+    console.debug(`[Stripe] Using priceId for ${plan}:`, priceId);
     
     if (!priceId) {
-      console.warn('[Stripe] missing priceId for', plan);
+      console.warn(`[Stripe] Button click blocked: missing priceId for ${plan}`);
+      console.warn('[Stripe] Available price IDs:', { monthly: monthlyId, annual: annualId });
       Alert.alert('Error', 'No Stripe priceId available. Check configuration.');
       return;
     }
+    
+    console.debug(`[Stripe] Proceeding with checkout for ${plan}:`, { priceId, userId, userEmail });
     
     try {
       setStripeLoading(true);
@@ -343,10 +371,12 @@ export default function PaywallScreen({
       
       console.debug('[Paywall] WEB_ORIGIN:', WEB_ORIGIN);
       console.debug('[Stripe] createCheckout payload:', payload);
+      console.debug('[Stripe] Calling createCheckout...');
+      console.debug('[Stripe] Final request URL will be:', `${API_BASE}/api/create-checkout-session`);
       
       const res = await createCheckout(payload);
       
-      console.debug('[Stripe] checkout response:', res);
+      console.debug('[Stripe] checkout response received:', res);
       
       if (!res.url) {
         Alert.alert('Error', 'Backend did not return a checkout URL');
@@ -357,6 +387,7 @@ export default function PaywallScreen({
       
       // Open checkout with WebBrowser
       try {
+        console.debug('[Stripe] Opening WebBrowser with URL:', res.url);
         const result = await WebBrowser.openBrowserAsync(res.url);
         console.debug('[Stripe] WebBrowser result:', result);
       } catch (e) {

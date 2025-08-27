@@ -1,55 +1,60 @@
 // Environment variables and constants
-export const API_BASE = process.env.EXPO_PUBLIC_API_BASE!;
+export const API_BASE = 
+  process.env.EXPO_PUBLIC_API_BASE?.replace(/\/+$/, "") ||
+  "https://formai-backend-dc3u.onrender.com";
+
 export const ENV_MONTHLY = process.env.EXPO_PUBLIC_STRIPE_PRICE_ID_MONTHLY || "";
 export const ENV_ANNUAL = process.env.EXPO_PUBLIC_STRIPE_PRICE_ID_ANNUAL || "";
 export const WEB_ORIGIN = process.env.EXPO_PUBLIC_WEB_ORIGIN || (typeof window !== "undefined" ? window.location.origin : "");
+
+// Defensive runtime guard
+if (!API_BASE || API_BASE.includes("undefined")) {
+  console.error("[API] Invalid API_BASE", { API_BASE, env: process.env.EXPO_PUBLIC_API_BASE });
+  throw new Error("API_BASE is invalid or undefined");
+}
 
 // Helper function to build full URLs
 function url(path: string) {
   return `${API_BASE}${path.startsWith('/') ? path : `/${path}`}`;
 }
 
-// Helper function to detect HTML responses (for diagnostics only)
-function isLikelyHtml(str: string): boolean {
-  return str.trim().startsWith('<!DOCTYPE') || str.trim().startsWith('<html') || str.includes('<body');
-}
-
 // API health check and startup assertion
 export async function assertApiReachable() {
   console.debug('[Paywall] API_BASE =', API_BASE);
   try {
-    const r = await fetch(url('/api/health'));
+    const healthUrl = `${API_BASE}/api/health`;
+    console.debug('[API] Health check URL:', healthUrl);
+    
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 2000);
+    
+    const r = await fetch(healthUrl, { signal: controller.signal });
+    clearTimeout(timeoutId);
+    
     if (!r.ok) throw new Error(`health ${r.status}`);
     const data = await r.json();
     console.debug('[Paywall] /api/health OK', data);
     return true;
-  } catch (e) {
+  } catch (e: any) {
     console.error('[Paywall] API not reachable:', e);
+    if (e.name === 'AbortError') {
+      console.error('[API] Health check timeout after 2s');
+    }
     return false;
   }
 }
 
 export async function getProducts() {
   try {
-    console.debug('[API] Fetching products from:', url('/api/stripe/products'));
-    const r = await fetch(url('/api/stripe/products'));
+    const productsUrl = `${API_BASE}/api/stripe/products`;
+    console.debug('[API] Fetching products from:', productsUrl);
     
+    const r = await fetch(productsUrl);
     if (!r.ok) {
       console.warn('[API] Stripe products endpoint failed:', r.status, r.statusText);
       throw new Error(`HTTP ${r.status}: ${r.statusText}`);
     }
-    
-    const responseText = await r.text();
-    console.debug('[API] Raw response length:', responseText.length);
-    
-    // Check if response is HTML instead of JSON
-    if (isLikelyHtml(responseText)) {
-      console.error('[API] Received HTML instead of JSON:', responseText.substring(0, 150));
-      throw new Error(`Expected JSON but got HTML (${r.status})`);
-    }
-    
-    const j = JSON.parse(responseText);
-    console.debug('[API] Parsed products response:', j);
+    const j = await r.json();
     
     // Check for MISSING_PRICE_IDS error
     if (j.error === "MISSING_PRICE_IDS") {
@@ -57,43 +62,17 @@ export async function getProducts() {
       throw new Error("MISSING_PRICE_IDS");
     }
     
-    // Validate response shape
-    if (j.monthly && j.annual) {
-      console.debug('[API] Using API products:', { monthly: j.monthly.id, annual: j.annual.id });
-      return {
-        usingApi: true,
-        usingFallback: false,
-        monthly: j.monthly,
-        annual: j.annual
-      };
-    } else {
-      console.warn('[API] Invalid products response shape:', j);
-      throw new Error("Invalid products response shape");
-    }
-    
+    console.debug('[API] Products loaded successfully:', j);
+    return j;
   } catch (error) {
     console.error('[API] Stripe products fetch failed, using fallback env prices:', error);
-    
     // Return fallback structure using ENV constants
-    const monthly = ENV_MONTHLY || '';
-    const annual = ENV_ANNUAL || '';
-    
-    const result = {
-      usingApi: false,
-      usingFallback: true,
-      monthly: monthly ? { id: monthly } : null,
-      annual: annual ? { id: annual } : null
+    const fallback = {
+      monthly: ENV_MONTHLY || null,
+      annual: ENV_ANNUAL || null
     };
-    
-    console.debug('[API] products fallback result:', { 
-      status: 'fallback', 
-      usingApi: false, 
-      usingFallback: true, 
-      monthly: !!monthly, 
-      annual: !!annual 
-    });
-    
-    return result;
+    console.debug('[API] Using fallback prices:', fallback);
+    return fallback;
   }
 }
 
@@ -104,10 +83,11 @@ export async function createCheckout(payload: {
   successUrl: string;
   cancelUrl: string;
 }): Promise<{ url: string }> {
-  console.debug('[Stripe] createCheckout request:', payload);
+  const requestUrl = `${API_BASE}/api/create-checkout-session`;
+  console.debug('[Stripe] createCheckout request:', { url: requestUrl, payload });
   
   try {
-    const r = await fetch(url('/api/create-checkout-session'), {
+    const r = await fetch(requestUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -124,13 +104,7 @@ export async function createCheckout(payload: {
     if (!r.ok) {
       const errorBody = await r.text();
       console.error('[Stripe] createCheckout error response:', errorBody);
-      
-      // Check if response is HTML
-      if (isLikelyHtml(errorBody)) {
-        throw new Error(`createCheckout failed: ${r.status} HTML response (${errorBody.substring(0, 150)})`);
-      }
-      
-      throw new Error(`createCheckout failed: ${r.status} ${errorBody.substring(0, 150)}`);
+      throw new Error(`[createCheckout] ${r.status} ${errorBody}`);
     }
     
     const j = await r.json();
@@ -152,10 +126,10 @@ export async function getSubscriptionStatus(userId: string): Promise<{
   plan?: "monthly"|"annual"; 
   currentPeriodEnd?: number 
 }> {
-  const url = `${API_BASE}/api/subscription/status?userId=${encodeURIComponent(userId)}`;
-  console.debug('[API] Checking subscription status:', url);
+  const statusUrl = `${API_BASE}/api/subscription/status?userId=${encodeURIComponent(userId)}`;
+  console.debug('[API] Checking subscription status:', statusUrl);
   
-  const r = await fetch(url);
+  const r = await fetch(statusUrl);
   if (!r.ok) {
     console.error('[API] Subscription status failed:', r.status, r.statusText);
     throw new Error(`HTTP ${r.status}: ${r.statusText}`);
@@ -168,7 +142,16 @@ export async function getSubscriptionStatus(userId: string): Promise<{
 
 // STRIPE: Get Stripe price configuration status
 export async function getStripePrices() {
-  const r = await fetch(url('/api/stripe/prices'));
-  if (!r.ok) throw new Error("Failed to fetch Stripe prices");
-  return await r.json();
+  const pricesUrl = `${API_BASE}/api/stripe/prices`;
+  console.debug('[API] Fetching Stripe prices from:', pricesUrl);
+  
+  const r = await fetch(pricesUrl);
+  if (!r.ok) {
+    console.error('[API] Failed to fetch Stripe prices:', r.status, r.statusText);
+    throw new Error("Failed to fetch Stripe prices");
+  }
+  
+  const data = await r.json();
+  console.debug('[API] Stripe prices response:', data);
+  return data;
 }
