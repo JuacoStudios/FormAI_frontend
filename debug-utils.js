@@ -5,7 +5,6 @@ const resetAllState = async () => {
   try {
     // Limpiar todas las claves relacionadas con el estado de la app
     const keysToRemove = [
-      'onboardingCompleted',
       'diagnosticCompleted',
       'hasSeenWelcome',
       'hasCompletedFirstScan',
@@ -33,7 +32,6 @@ const resetAllState = async () => {
 const checkCurrentState = async () => {
   try {
     const keysToCheck = [
-      'onboardingCompleted',
       'diagnosticCompleted',
       'hasSeenWelcome',
       'hasCompletedFirstScan',

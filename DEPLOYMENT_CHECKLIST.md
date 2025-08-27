@@ -79,3 +79,4 @@ If issues persist:
 If needed:
 1. Set `EXPO_PUBLIC_SHOW_ONBOARDING=true`
 2. Or revert the commit: `git revert <commit-hash>`
+
