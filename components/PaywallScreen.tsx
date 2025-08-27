@@ -171,8 +171,15 @@ export default function PaywallScreen({
   // API health check and preload Stripe prices on mount
   useEffect(() => {
     const initializeApi = async () => {
+      console.debug('[Paywall] Initializing API...');
+      console.debug('[Paywall] API_BASE:', API_BASE);
+      console.debug('[Paywall] ENV_MONTHLY:', ENV_MONTHLY ? 'present' : 'missing');
+      console.debug('[Paywall] ENV_ANNUAL:', ENV_ANNUAL ? 'present' : 'missing');
+      console.debug('[Paywall] WEB_ORIGIN:', WEB_ORIGIN);
+      
       // Check API reachability
-      await assertApiReachable();
+      const apiReachable = await assertApiReachable();
+      console.debug('[Paywall] API reachable:', apiReachable);
       
       // Preload Stripe prices
       await preloadStripePrices();

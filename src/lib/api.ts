@@ -9,6 +9,11 @@ function url(path: string) {
   return `${API_BASE}${path.startsWith('/') ? path : `/${path}`}`;
 }
 
+// Helper function to detect HTML responses (for diagnostics only)
+function isLikelyHtml(str: string): boolean {
+  return str.trim().startsWith('<!DOCTYPE') || str.trim().startsWith('<html') || str.includes('<body');
+}
+
 // API health check and startup assertion
 export async function assertApiReachable() {
   console.debug('[Paywall] API_BASE =', API_BASE);
@@ -26,12 +31,25 @@ export async function assertApiReachable() {
 
 export async function getProducts() {
   try {
+    console.debug('[API] Fetching products from:', url('/api/stripe/products'));
     const r = await fetch(url('/api/stripe/products'));
+    
     if (!r.ok) {
       console.warn('[API] Stripe products endpoint failed:', r.status, r.statusText);
       throw new Error(`HTTP ${r.status}: ${r.statusText}`);
     }
-    const j = await r.json();
+    
+    const responseText = await r.text();
+    console.debug('[API] Raw response length:', responseText.length);
+    
+    // Check if response is HTML instead of JSON
+    if (isLikelyHtml(responseText)) {
+      console.error('[API] Received HTML instead of JSON:', responseText.substring(0, 150));
+      throw new Error(`Expected JSON but got HTML (${r.status})`);
+    }
+    
+    const j = JSON.parse(responseText);
+    console.debug('[API] Parsed products response:', j);
     
     // Check for MISSING_PRICE_IDS error
     if (j.error === "MISSING_PRICE_IDS") {
@@ -39,14 +57,43 @@ export async function getProducts() {
       throw new Error("MISSING_PRICE_IDS");
     }
     
-    return j;
+    // Validate response shape
+    if (j.monthly && j.annual) {
+      console.debug('[API] Using API products:', { monthly: j.monthly.id, annual: j.annual.id });
+      return {
+        usingApi: true,
+        usingFallback: false,
+        monthly: j.monthly,
+        annual: j.annual
+      };
+    } else {
+      console.warn('[API] Invalid products response shape:', j);
+      throw new Error("Invalid products response shape");
+    }
+    
   } catch (error) {
     console.error('[API] Stripe products fetch failed, using fallback env prices:', error);
+    
     // Return fallback structure using ENV constants
-    return {
-      monthly: ENV_MONTHLY || null,
-      annual: ENV_ANNUAL || null
+    const monthly = ENV_MONTHLY || '';
+    const annual = ENV_ANNUAL || '';
+    
+    const result = {
+      usingApi: false,
+      usingFallback: true,
+      monthly: monthly ? { id: monthly } : null,
+      annual: annual ? { id: annual } : null
     };
+    
+    console.debug('[API] products fallback result:', { 
+      status: 'fallback', 
+      usingApi: false, 
+      usingFallback: true, 
+      monthly: !!monthly, 
+      annual: !!annual 
+    });
+    
+    return result;
   }
 }
 
@@ -77,7 +124,13 @@ export async function createCheckout(payload: {
     if (!r.ok) {
       const errorBody = await r.text();
       console.error('[Stripe] createCheckout error response:', errorBody);
-      throw new Error(`HTTP ${r.status}: ${errorBody}`);
+      
+      // Check if response is HTML
+      if (isLikelyHtml(errorBody)) {
+        throw new Error(`createCheckout failed: ${r.status} HTML response (${errorBody.substring(0, 150)})`);
+      }
+      
+      throw new Error(`createCheckout failed: ${r.status} ${errorBody.substring(0, 150)}`);
     }
     
     const j = await r.json();
@@ -99,9 +152,18 @@ export async function getSubscriptionStatus(userId: string): Promise<{
   plan?: "monthly"|"annual"; 
   currentPeriodEnd?: number 
 }> {
-  const r = await fetch(url(`/api/subscription/status?userId=${encodeURIComponent(userId)}`));
-  if (!r.ok) throw new Error(`HTTP ${r.status}: ${r.statusText}`);
-  return await r.json();
+  const url = `${API_BASE}/api/subscription/status?userId=${encodeURIComponent(userId)}`;
+  console.debug('[API] Checking subscription status:', url);
+  
+  const r = await fetch(url);
+  if (!r.ok) {
+    console.error('[API] Subscription status failed:', r.status, r.statusText);
+    throw new Error(`HTTP ${r.status}: ${r.statusText}`);
+  }
+  
+  const data = await r.json();
+  console.debug('[API] Subscription status response:', data);
+  return data;
 }
 
 // STRIPE: Get Stripe price configuration status
