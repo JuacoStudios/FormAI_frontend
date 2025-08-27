@@ -181,22 +181,28 @@ export default function PaywallScreen({
       if (!API_BASE || API_BASE.includes("undefined")) {
         console.error('[Paywall] Invalid API_BASE detected:', API_BASE);
         console.error('[Paywall] Environment variable EXPO_PUBLIC_API_BASE:', process.env.EXPO_PUBLIC_API_BASE);
-        setCanSubscribe(false);
+        // Don't block buttons - use env fallback
+        console.warn('[Paywall] Using environment fallback mode due to invalid API_BASE');
         return;
       }
       
-      // Check API reachability
-      const apiReachable = await assertApiReachable();
-      console.debug('[Paywall] API reachable:', apiReachable);
-      
-      if (!apiReachable) {
-        console.warn('[Paywall] API not reachable, enabling fallback mode');
-        setCanSubscribe(false);
-        return;
+      // Check API reachability (non-blocking)
+      try {
+        const apiReachable = await assertApiReachable();
+        console.debug('[Paywall] API reachable:', apiReachable);
+        
+        if (!apiReachable) {
+          console.warn('[Paywall] API not reachable, will use env fallback mode');
+          // Don't block buttons - use env fallback
+          return;
+        }
+        
+        // Preload Stripe prices only if API is reachable
+        await preloadStripePrices();
+      } catch (error) {
+        console.warn('[Paywall] API initialization failed, using env fallback:', error);
+        // Don't block buttons - use env fallback
       }
-      
-      // Preload Stripe prices
-      await preloadStripePrices();
     };
     
     initializeApi();
@@ -246,18 +252,29 @@ export default function PaywallScreen({
 
   // Compute subscription availability
   useEffect(() => {
-    const hasPrices = Boolean(monthlyId && annualId);
-    const hasEmail = userEmail.trim().length > 0;
-    const canSub = hasPrices && hasEmail;
+    // Use environment variables as fallback when API fails
+    const envMonthly = process.env.EXPO_PUBLIC_STRIPE_PRICE_ID_MONTHLY ?? "";
+    const envAnnual = process.env.EXPO_PUBLIC_STRIPE_PRICE_ID_ANNUAL ?? "";
+    
+    const priceMonthly = monthlyId || envMonthly;
+    const priceAnnual = annualId || envAnnual;
+    
+    const hasPrices = Boolean(priceMonthly || priceAnnual);
+    const emailValid = !!userEmail.trim() && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(userEmail.trim());
+    const canSub = hasPrices && emailValid;
     
     setCanSubscribe(Boolean(canSub));
     
-    console.debug('[Paywall] Subscription availability computed:', {
+    console.debug('[Paywall] canSubscribe computed:', { 
+      emailValid, 
+      priceMonthly: !!priceMonthly, 
+      priceAnnual: !!priceAnnual,
       hasPrices,
-      hasEmail,
       canSubscribe: canSub,
       monthlyId: !!monthlyId,
       annualId: !!annualId,
+      envMonthly: !!envMonthly,
+      envAnnual: !!envAnnual,
       userEmail: userEmail.trim().length
     });
   }, [monthlyId, annualId, userEmail]);
@@ -321,34 +338,26 @@ export default function PaywallScreen({
 
   // STRIPE: Handle Stripe subscription
   const handleStripeSubscribe = useCallback(async (plan: 'monthly' | 'annual') => {
-    console.debug(`[Stripe] CLICK ${plan} button pressed`);
-    console.debug(`[Stripe] Plan: ${plan}, userId: ${userId}, email: ${userEmail}`);
-    console.debug(`[Stripe] API_BASE: ${API_BASE}`);
-    
-    // Defensive check for API_BASE
-    if (!API_BASE || API_BASE.includes("undefined")) {
-      console.error('[Stripe] Invalid API_BASE detected:', API_BASE);
-      Alert.alert('Error', 'API configuration error. Please check console for details.');
-      return;
-    }
+    console.debug(`[Stripe] Subscribe ${plan} pressed`);
     
     if (!userEmail.trim()) {
-      console.debug('[Stripe] Button click blocked: no email entered');
       Alert.alert('Error', 'Please enter your email address');
       return;
     }
     
-    const priceId = plan === 'monthly' ? monthlyId : annualId;
-    console.debug(`[Stripe] Using priceId for ${plan}:`, priceId);
+    // Get price ID with env fallback
+    const envMonthly = process.env.EXPO_PUBLIC_STRIPE_PRICE_ID_MONTHLY ?? "";
+    const envAnnual = process.env.EXPO_PUBLIC_STRIPE_PRICE_ID_ANNUAL ?? "";
+    
+    const priceId = plan === 'monthly' ? (monthlyId || envMonthly) : (annualId || envAnnual);
     
     if (!priceId) {
-      console.warn(`[Stripe] Button click blocked: missing priceId for ${plan}`);
-      console.warn('[Stripe] Available price IDs:', { monthly: monthlyId, annual: annualId });
+      console.warn('[Stripe] missing priceId for', plan, { monthlyId, annualId, envMonthly, envAnnual });
       Alert.alert('Error', 'No Stripe priceId available. Check configuration.');
       return;
     }
     
-    console.debug(`[Stripe] Proceeding with checkout for ${plan}:`, { priceId, userId, userEmail });
+    console.debug('[Stripe] Using priceId for', plan, priceId);
     
     try {
       setStripeLoading(true);
@@ -371,12 +380,10 @@ export default function PaywallScreen({
       
       console.debug('[Paywall] WEB_ORIGIN:', WEB_ORIGIN);
       console.debug('[Stripe] createCheckout payload:', payload);
-      console.debug('[Stripe] Calling createCheckout...');
-      console.debug('[Stripe] Final request URL will be:', `${API_BASE}/api/create-checkout-session`);
       
       const res = await createCheckout(payload);
       
-      console.debug('[Stripe] checkout response received:', res);
+      console.debug('[Stripe] checkout response:', res);
       
       if (!res.url) {
         Alert.alert('Error', 'Backend did not return a checkout URL');
@@ -385,14 +392,20 @@ export default function PaywallScreen({
       
       console.debug('[Stripe] success url:', res.url);
       
-      // Open checkout with WebBrowser
+      // Open checkout - use window.open for web, WebBrowser for mobile
       try {
-        console.debug('[Stripe] Opening WebBrowser with URL:', res.url);
-        const result = await WebBrowser.openBrowserAsync(res.url);
-        console.debug('[Stripe] WebBrowser result:', result);
+        if (typeof window !== 'undefined') {
+          // Web: open in new tab
+          console.debug('[Stripe] Opening checkout in new tab:', res.url);
+          window.open(res.url, '_blank', 'noopener');
+        } else {
+          // Mobile: use WebBrowser
+          const result = await WebBrowser.openBrowserAsync(res.url);
+          console.debug('[Stripe] WebBrowser result:', result);
+        }
       } catch (e) {
-        console.error('[Stripe] WebBrowser error:', e);
-        Alert.alert('Error', 'Could not open checkout in browser');
+        console.error('[Stripe] Error opening checkout:', e);
+        Alert.alert('Error', 'Could not open checkout. Please try again.');
       }
     } catch (err) {
       console.error('[Stripe] subscribe error:', err);
@@ -417,6 +430,17 @@ export default function PaywallScreen({
   );
 
   // RENDER LOGIC - NO MORE HOOKS AFTER THIS POINT
+  
+  // Debug logging for production troubleshooting
+  console.debug('[Paywall] canSubscribe', { 
+    canSubscribe, 
+    monthlyId: !!monthlyId, 
+    annualId: !!annualId,
+    envMonthly: !!process.env.EXPO_PUBLIC_STRIPE_PRICE_ID_MONTHLY,
+    envAnnual: !!process.env.EXPO_PUBLIC_STRIPE_PRICE_ID_ANNUAL,
+    API_BASE,
+    userEmail: userEmail.trim().length > 0
+  });
   
   // Early return check - but all hooks have been declared above
   if (!visible) {

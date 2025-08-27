@@ -13,8 +13,11 @@ if (!API_BASE || API_BASE.includes("undefined")) {
   throw new Error("API_BASE is invalid or undefined");
 }
 
-// Helper function to build full URLs
-function url(path: string) {
+// Safe URL builder to avoid undefined/ prefixes
+function u(path: string) {
+  if (!API_BASE || API_BASE.includes("undefined")) {
+    throw new Error(`Invalid API_BASE: ${API_BASE}`);
+  }
   return `${API_BASE}${path.startsWith('/') ? path : `/${path}`}`;
 }
 
@@ -22,7 +25,7 @@ function url(path: string) {
 export async function assertApiReachable() {
   console.debug('[Paywall] API_BASE =', API_BASE);
   try {
-    const healthUrl = `${API_BASE}/api/health`;
+    const healthUrl = u('/api/health');
     console.debug('[API] Health check URL:', healthUrl);
     
     const controller = new AbortController();
@@ -46,7 +49,7 @@ export async function assertApiReachable() {
 
 export async function getProducts() {
   try {
-    const productsUrl = `${API_BASE}/api/stripe/products`;
+    const productsUrl = u('/api/stripe/products');
     console.debug('[API] Fetching products from:', productsUrl);
     
     const r = await fetch(productsUrl);
@@ -83,7 +86,7 @@ export async function createCheckout(payload: {
   successUrl: string;
   cancelUrl: string;
 }): Promise<{ url: string }> {
-  const requestUrl = `${API_BASE}/api/create-checkout-session`;
+  const requestUrl = u('/api/create-checkout-session');
   console.debug('[Stripe] createCheckout request:', { url: requestUrl, payload });
   
   try {
@@ -126,7 +129,7 @@ export async function getSubscriptionStatus(userId: string): Promise<{
   plan?: "monthly"|"annual"; 
   currentPeriodEnd?: number 
 }> {
-  const statusUrl = `${API_BASE}/api/subscription/status?userId=${encodeURIComponent(userId)}`;
+  const statusUrl = u(`/api/subscription/status?userId=${encodeURIComponent(userId)}`);
   console.debug('[API] Checking subscription status:', statusUrl);
   
   const r = await fetch(statusUrl);
@@ -142,7 +145,7 @@ export async function getSubscriptionStatus(userId: string): Promise<{
 
 // STRIPE: Get Stripe price configuration status
 export async function getStripePrices() {
-  const pricesUrl = `${API_BASE}/api/stripe/prices`;
+  const pricesUrl = u('/api/stripe/prices');
   console.debug('[API] Fetching Stripe prices from:', pricesUrl);
   
   const r = await fetch(pricesUrl);
