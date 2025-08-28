@@ -11,6 +11,7 @@ import PaywallScreen from '@/components/PaywallScreen';
 import { Linking } from 'react-native';
 import { usePlatform } from '@/hooks/usePlatform';
 import WebCameraFallback from '@/components/WebCameraFallback';
+import { CaptureButton } from '@/components/CaptureButton';
 // PERF: Import web-safe optimized utilities
 import { timedFetch, retryFetch } from '@/src/lib/timedFetch';
 import { optimizeImage, formatFileSize } from '@/src/lib/imageOptimizerWeb';
@@ -85,6 +86,8 @@ export default function ScanScreen() {
       console.error('❌ API validation error on mount:', error);
     });
   }, []);
+
+
 
   // Check if this is the first time the user opens the app
   const checkFirstTimeUser = async () => {
@@ -209,6 +212,11 @@ export default function ScanScreen() {
   // Debug logging
   console.log('🔍 Debug canScan:', { isPremium, scanCount, canScan, shouldShowPaywall });
 
+  // Debug state changes
+  useEffect(() => {
+    console.debug('[scan] state', { analyzing, canScan, shouldShowPaywall, scanCount, isPremium });
+  }, [analyzing, canScan, shouldShowPaywall, scanCount, isPremium]);
+
   if (!permission) {
     return (
       <View style={styles.container}>
@@ -263,6 +271,7 @@ export default function ScanScreen() {
   };
 
   const handleCapture = async () => {
+    console.debug('[capture] invoked', { type: 'handleCapture' });
     console.log('📸 handleCapture started');
     console.log('🔍 Estado actual:', { analyzing, canScan, shouldShowPaywall, isPremium, scanCount });
     
@@ -603,7 +612,7 @@ export default function ScanScreen() {
         facing={facing}
       >
         {/* Scan Overlay - Title only */}
-        <View style={styles.scanOverlay}>
+        <View style={styles.scanOverlay} pointerEvents="none">
           {/* Title */}
           <View style={styles.titleContainer}>
             <Text style={styles.scanTitleLine1}>SCAN YOUR</Text>
@@ -612,7 +621,7 @@ export default function ScanScreen() {
         </View>
         
         {/* Dark overlay with transparent cutout */}
-        <View style={styles.darkOverlay}>
+        <View style={styles.darkOverlay} pointerEvents="none">
           <View style={styles.overlayTop} />
           <View style={styles.overlayLeft} />
           <View style={styles.overlayRight} />
@@ -621,7 +630,7 @@ export default function ScanScreen() {
         </View>
         
         {/* Results and Controls */}
-        <View style={styles.overlay}>
+        <View style={styles.overlay} pointerEvents="box-none">
           {result && (
             <BlurView intensity={85} style={styles.resultContainer}>
               <Text style={styles.resultText}>{result}</Text>
@@ -693,24 +702,26 @@ export default function ScanScreen() {
       </View>
 
       {/* Botón de captura (FAB) */}
-      <TouchableOpacity
-        style={[
-          styles.captureButton,
-          analyzing && styles.capturing,
-          {
-            position: 'absolute',
-            bottom: 56, // Tab bar height
-            alignSelf: 'center',
-            zIndex: 1000,
-            elevation: 1000,
-          }
-        ]}
-        onPress={handleCapture}
-        disabled={analyzing || !canScan || shouldShowPaywall}
-        activeOpacity={0.7}
-      >
-        <CameraIcon color="white" size={32} />
-      </TouchableOpacity>
+      <View style={[
+        styles.captureContainer,
+        {
+          position: 'absolute',
+          bottom: 56, // Tab bar height
+          alignSelf: 'center',
+          zIndex: 1000,
+          elevation: 1000,
+        }
+      ]}>
+        <CaptureButton
+          onPress={handleCapture}
+          disabled={analyzing || !canScan || shouldShowPaywall}
+          testID="capture-btn"
+          style={[
+            styles.captureButton,
+            analyzing && styles.capturing,
+          ]}
+        />
+      </View>
 
       {/* Welcome Modal */}
       <Modal
@@ -788,6 +799,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 40,
     paddingHorizontal: 20,
+  },
+  captureContainer: {
+    position: 'absolute',
+    bottom: 24,
+    alignSelf: 'center',
+    pointerEvents: 'auto',
   },
   captureButton: {
     width: 80,
