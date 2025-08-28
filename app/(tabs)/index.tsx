@@ -566,15 +566,7 @@ export default function ScanScreen() {
                <FlipCamera color="white" size={24} />
              </TouchableOpacity>
             
-                         {/* Botón de reset de escaneos */}
-             <TouchableOpacity
-               style={styles.resetButton}
-               onPress={() => {
-                 console.log('🔴 Reset Escaneos button pressed!');
-                 resetScanCount();
-               }}>
-               <Text style={styles.resetButtonText}>Reset Escaneos</Text>
-             </TouchableOpacity>
+
             
             {/* Debug buttons */}
             {__DEV__ && (
@@ -608,11 +600,6 @@ export default function ScanScreen() {
               <Text style={styles.debugText}>
                 Scans: {isPremium ? '∞ (Premium)' : `${scanCount} (Free)`}
               </Text>
-              <TouchableOpacity
-                style={styles.debugButton}
-                onPress={resetScanCount}>
-                <Text style={styles.debugButtonText}>Reset</Text>
-              </TouchableOpacity>
             </View>
           )}
         </View>
@@ -792,33 +779,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginBottom: 8,
   },
-  debugButton: {
-    backgroundColor: '#00e676',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
-  },
-  debugButtonText: {
-    color: 'black',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  resetButton: {
-    position: 'absolute',
-    right: 20,
-    backgroundColor: 'rgba(255, 0, 0, 0.8)',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-    zIndex: 25,
-  },
-  resetButtonText: {
-    color: 'white',
-    fontSize: 12,
-    fontWeight: '600',
-  },
+
+
   debugPaywallButton: {
     position: 'absolute',
     right: 20,
@@ -965,7 +927,9 @@ const styles = StyleSheet.create({
     flex: 0,
   },
   scanTitleLine1: {
-    fontSize: 22,
+    // TODO: Fine-tune exact font size if needed - currently increased by ~25% from 22 to 28
+    fontSize: 28,
+    fontFamily: 'Coolvetica, Arial, sans-serif',
     fontWeight: '700',
     color: '#00e676',
     textAlign: 'center',
@@ -976,7 +940,9 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   scanTitleLine2: {
-    fontSize: 22,
+    // TODO: Fine-tune exact font size if needed - currently increased by ~25% from 22 to 28
+    fontSize: 28,
+    fontFamily: 'Coolvetica, Arial, sans-serif',
     fontWeight: '700',
     color: '#00e676',
     textAlign: 'center',
