@@ -12,6 +12,11 @@ import { Linking } from 'react-native';
 import { usePlatform } from '@/hooks/usePlatform';
 import WebCameraFallback from '@/components/WebCameraFallback';
 
+// Layout constants for responsive design
+const FAB_SIZE = 80;            // px, actual rendered size of the green capture button
+const FAB_GAP = 16;             // px, visual gap between text and FAB
+const SAFE_BOTTOM = 'env(safe-area-inset-bottom, 0px)';
+
 // Storage keys
 const SCAN_COUNT_KEY = 'scanAttemptCount';
 const SCAN_HISTORY_KEY = 'scanHistory';
@@ -519,18 +524,12 @@ export default function ScanScreen() {
         style={styles.camera} 
         facing={facing}
       >
-        {/* Scan Overlay */}
+        {/* Scan Overlay - Title only */}
         <View style={styles.scanOverlay}>
           {/* Title */}
           <View style={styles.titleContainer}>
             <Text style={styles.scanTitleLine1}>SCAN YOUR</Text>
             <Text style={styles.scanTitleLine2}>GYM MACHINE</Text>
-          </View>
-          
-          {/* Scan instructions */}
-          <View style={styles.scanInstructions}>
-            <Text style={styles.scanInstructionText}>Position the machine within the frame</Text>
-            <Text style={styles.instructionSubtext}>Ensure good lighting for best results</Text>
           </View>
         </View>
         
@@ -605,14 +604,24 @@ export default function ScanScreen() {
         </View>
       </CameraView>
 
-      {/* Botón de captura */}
+      {/* Instructions container - positioned above FAB with proper spacing */}
+      <View style={styles.instructionsContainer}>
+        <Text style={styles.scanInstructionText}>
+          Position the machine within the frame
+        </Text>
+        <Text style={styles.instructionSubtext}>
+          Ensure good lighting for best results
+        </Text>
+      </View>
+
+      {/* Botón de captura (FAB) */}
       <TouchableOpacity
         style={[
           styles.captureButton,
           analyzing && styles.capturing,
           {
             position: 'absolute',
-            bottom: 40,
+            bottom: 56, // Tab bar height
             alignSelf: 'center',
             zIndex: 1000,
             elevation: 1000,
@@ -951,30 +960,37 @@ const styles = StyleSheet.create({
     textShadowRadius: 4,
     letterSpacing: 1,
   },
-  scanInstructions: {
-    alignItems: 'center',
-    paddingHorizontal: 30,
-    flex: 0,
-    marginTop: 20,
+  // Instructions container - positioned above FAB with proper spacing
+  instructionsContainer: {
+    position: 'absolute',
+    bottom: FAB_SIZE + FAB_GAP + 56, // FAB size + gap + tab bar height
+    left: 0,
+    right: 0,
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+    zIndex: 15,
   },
   scanInstructionText: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 18,
+    fontWeight: '700',
     color: 'white',
     textAlign: 'center',
-    marginBottom: 8,
+    marginBottom: 6,
     textShadowColor: 'rgba(0, 0, 0, 0.8)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 2,
+    lineHeight: 24,
   },
   instructionSubtext: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '400',
     color: '#cccccc',
     textAlign: 'center',
     textShadowColor: 'rgba(0, 0, 0, 0.8)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 2,
+    lineHeight: 22,
+    opacity: 0.85,
   },
   // Enhanced overlay styles
   darkOverlay: {
