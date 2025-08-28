@@ -12,9 +12,19 @@ type Props = {
 
 export function CaptureButton({ onPress, disabled, testID, style, children }: Props) {
   const handlePress = (e?: any) => {
-    console.debug('[capture] button pressed', { type: e?.type, disabled });
+    console.debug('[capture] button pressed', { 
+      type: e?.type, 
+      disabled, 
+      platform: Platform.OS,
+      timestamp: Date.now()
+    });
     if (!disabled) {
       onPress();
+    } else {
+      console.debug('[capture] button blocked', { 
+        disabled, 
+        reason: 'Button is disabled'
+      });
     }
   };
 
@@ -25,11 +35,27 @@ export function CaptureButton({ onPress, disabled, testID, style, children }: Pr
         aria-label="Capture gym machine"
         data-testid={testID ?? 'capture-btn'}
         onClick={(e) => { 
+          console.debug('[capture] web onClick', { type: e.type, disabled });
           e.preventDefault(); 
           e.stopPropagation(); 
           handlePress(e); 
         }}
+        onMouseDown={(e) => {
+          console.debug('[capture] web onMouseDown', { type: e.type, disabled });
+          if (!disabled) {
+            e.preventDefault();
+            handlePress(e);
+          }
+        }}
+        onTouchStart={(e) => {
+          console.debug('[capture] web onTouchStart', { type: e.type, disabled });
+          if (!disabled) {
+            e.preventDefault();
+            handlePress(e);
+          }
+        }}
         onKeyDown={(e) => {
+          console.debug('[capture] web onKeyDown', { key: e.key, disabled });
           if (e.key === 'Enter' || e.key === ' ') { 
             e.preventDefault(); 
             handlePress(e); 
@@ -44,6 +70,10 @@ export function CaptureButton({ onPress, disabled, testID, style, children }: Pr
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
+          userSelect: 'none',
+          WebkitUserSelect: 'none',
+          MozUserSelect: 'none',
+          msUserSelect: 'none',
           ...style
         }}
       >

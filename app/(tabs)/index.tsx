@@ -89,6 +89,8 @@ export default function ScanScreen() {
 
 
 
+
+
   // Check if this is the first time the user opens the app
   const checkFirstTimeUser = async () => {
     try {
@@ -216,6 +218,18 @@ export default function ScanScreen() {
   useEffect(() => {
     console.debug('[scan] state', { analyzing, canScan, shouldShowPaywall, scanCount, isPremium });
   }, [analyzing, canScan, shouldShowPaywall, scanCount, isPremium]);
+
+  // Additional debug logging for troubleshooting
+  useEffect(() => {
+    console.debug('[scan] state changed', { 
+      analyzing, 
+      canScan, 
+      shouldShowPaywall, 
+      isPremium, 
+      scanCount,
+      hasCompletedFirstScan 
+    });
+  }, [analyzing, canScan, shouldShowPaywall, isPremium, scanCount, hasCompletedFirstScan]);
 
   if (!permission) {
     return (
@@ -710,6 +724,7 @@ export default function ScanScreen() {
           alignSelf: 'center',
           zIndex: 1000,
           elevation: 1000,
+          pointerEvents: 'auto',
         }
       ]}>
         <CaptureButton
@@ -721,6 +736,33 @@ export default function ScanScreen() {
             analyzing && styles.capturing,
           ]}
         />
+        {/* Debug info for web */}
+        {__DEV__ && (
+          <View style={styles.debugButtonInfo}>
+            <Text style={styles.debugButtonText}>
+              Can Scan: {canScan ? '✅' : '❌'}
+            </Text>
+            <Text style={styles.debugButtonText}>
+              Analyzing: {analyzing ? '🔄' : '⏸️'}
+            </Text>
+            <Text style={styles.debugButtonText}>
+              Paywall: {shouldShowPaywall ? '🔒' : '🔓'}
+            </Text>
+          </View>
+        )}
+        
+        {/* Test button for debugging */}
+        {__DEV__ && (
+          <TouchableOpacity
+            style={styles.testButton}
+            onPress={() => {
+              console.log('🧪 Test button pressed!');
+              Alert.alert('Test', 'Test button works!');
+            }}
+          >
+            <Text style={styles.testButtonText}>🧪 Test</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Welcome Modal */}
@@ -896,6 +938,37 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.3)',
     zIndex: 25,
+  },
+  debugButtonInfo: {
+    position: 'absolute',
+    top: -80,
+    left: -20,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    padding: 8,
+    borderRadius: 6,
+    minWidth: 120,
+    alignItems: 'center',
+  },
+  debugButtonText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  testButton: {
+    position: 'absolute',
+    top: -120,
+    right: -20,
+    backgroundColor: 'rgba(255, 0, 0, 0.8)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    zIndex: 1001,
+  },
+  testButtonText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: '600',
   },
   debugPaywallButtonText: {
     color: 'white',
