@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
-import { API_BASE } from '../lib/api';
+import { API_BASE } from '../lib/apiLegacy';
 
 export type Plan = 'monthly' | 'annual' | null;
 

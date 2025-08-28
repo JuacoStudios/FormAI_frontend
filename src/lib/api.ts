@@ -1,160 +1,195 @@
-// Environment variables and constants
-export const API_BASE = 
-  process.env.EXPO_PUBLIC_API_BASE?.replace(/\/+$/, "") ||
-  "https://formai-backend-dc3u.onrender.com";
+// PERF: Unified API client with preflight checks and error handling
+// Compatible with Expo Web export and Vercel builds
 
-export const ENV_MONTHLY = process.env.EXPO_PUBLIC_STRIPE_PRICE_ID_MONTHLY || "";
-export const ENV_ANNUAL = process.env.EXPO_PUBLIC_STRIPE_PRICE_ID_ANNUAL || "";
-export const WEB_ORIGIN = process.env.EXPO_PUBLIC_WEB_ORIGIN || (typeof window !== "undefined" ? window.location.origin : "");
+import config from '../../app/config';
+import { timedFetch } from './timedFetch';
 
-// Defensive runtime guard
-if (!API_BASE || API_BASE.includes("undefined")) {
-  console.error("[API] Invalid API_BASE", { API_BASE, env: process.env.EXPO_PUBLIC_API_BASE });
-  throw new Error("API_BASE is invalid or undefined");
+export interface ApiResponse<T = any> {
+  success: boolean;
+  data?: T;
+  error?: string;
+  status: number;
+  requestId: string;
+  responseTime: number;
 }
 
-// Safe URL builder to avoid undefined/ prefixes
-function u(path: string) {
-  if (!API_BASE || API_BASE.includes("undefined")) {
-    throw new Error(`Invalid API_BASE: ${API_BASE}`);
-  }
-  return `${API_BASE}${path.startsWith('/') ? path : `/${path}`}`;
+export interface AnalyzeRequest {
+  image: File | Blob;
+  metadata?: {
+    timestamp: number;
+    deviceInfo?: string;
+  };
 }
 
-// API health check and startup assertion
-export async function assertApiReachable() {
-  console.debug('[Paywall] API_BASE =', API_BASE);
-  try {
-    const healthUrl = u('/api/health');
-    console.debug('[API] Health check URL:', healthUrl);
-    
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 2000);
-    
-    const r = await fetch(healthUrl, { signal: controller.signal });
-    clearTimeout(timeoutId);
-    
-    if (!r.ok) throw new Error(`health ${r.status}`);
-    const data = await r.json();
-    console.debug('[Paywall] /api/health OK', data);
-    return true;
-  } catch (e: any) {
-    console.error('[Paywall] API not reachable:', e);
-    if (e.name === 'AbortError') {
-      console.error('[API] Health check timeout after 2s');
-    }
-    return false;
-  }
+export interface AnalyzeResponse {
+  result: string;
+  confidence: number;
+  machineType: string;
+  recommendations: string[];
 }
 
-export async function getProducts() {
-  try {
-    const productsUrl = u('/api/stripe/products');
-    console.debug('[API] Fetching products from:', productsUrl);
-    
-    const r = await fetch(productsUrl);
-    if (!r.ok) {
-      console.warn('[API] Stripe products endpoint failed:', r.status, r.statusText);
-      throw new Error(`HTTP ${r.status}: ${r.statusText}`);
-    }
-    const j = await r.json();
-    
-    // Check for MISSING_PRICE_IDS error
-    if (j.error === "MISSING_PRICE_IDS") {
-      console.warn('[API] Stripe products endpoint returned MISSING_PRICE_IDS, using env fallback');
-      throw new Error("MISSING_PRICE_IDS");
-    }
-    
-    console.debug('[API] Products loaded successfully:', j);
-    return j;
-  } catch (error) {
-    console.error('[API] Stripe products fetch failed, using fallback env prices:', error);
-    // Return fallback structure using ENV constants
-    const fallback = {
-      monthly: ENV_MONTHLY || null,
-      annual: ENV_ANNUAL || null
-    };
-    console.debug('[API] Using fallback prices:', fallback);
-    return fallback;
-  }
-}
-
-export async function createCheckout(payload: {
-  priceId: string;
-  customerEmail: string;
-  userId: string;
-  successUrl: string;
-  cancelUrl: string;
-}): Promise<{ url: string }> {
-  const requestUrl = u('/api/create-checkout-session');
-  console.debug('[Stripe] createCheckout request:', { url: requestUrl, payload });
+/**
+ * Preflight API check with consolidated logging
+ */
+export async function preflightCheck(): Promise<{
+  url: string;
+  method: string;
+  status: number;
+  timeMs: number;
+  healthy: boolean;
+}> {
+  const start = Date.now();
+  const url = `${config.backend.apiBaseUrl}/health`;
   
   try {
-    const r = await fetch(requestUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        priceId: payload.priceId,
-        customerEmail: payload.customerEmail,
-        userId: payload.userId,
-        successUrl: payload.successUrl,
-        cancelUrl: payload.cancelUrl
-      })
+    const { res, ms } = await timedFetch(url, {
+      method: 'GET',
+      timeoutMs: 5000
     });
     
-    console.debug('[Stripe] createCheckout response status:', r.status);
+    const healthy = res.ok;
+    const timeMs = Date.now() - start;
     
-    if (!r.ok) {
-      const errorBody = await r.text();
-      console.error('[Stripe] createCheckout error response:', errorBody);
-      throw new Error(`[createCheckout] ${r.status} ${errorBody}`);
-    }
+    // Consolidated log block
+    console.log('[api] Preflight check:', {
+      url,
+      method: 'GET',
+      status: res.status,
+      timeMs,
+      healthy,
+      responseTime: ms
+    });
     
-    const j = await r.json();
-    console.debug('[Stripe] createCheckout success response:', j);
-    
-    if (!j?.url) {
-      throw new Error("No checkout URL returned from backend");
-    }
-    
-    return { url: j.url };
-  } catch (err: any) {
-    console.error('[Stripe] createCheckout error:', err);
-    throw new Error(err.message || "Failed to create checkout session");
+    return { url, method: 'GET', status: res.status, timeMs, healthy };
+  } catch (error) {
+    const timeMs = Date.now() - start;
+    console.error('[api] Preflight failed:', { url, method: 'GET', status: 0, timeMs, healthy: false, error });
+    return { url, method: 'GET', status: 0, timeMs, healthy: false };
   }
 }
 
-export async function getSubscriptionStatus(userId: string): Promise<{ 
-  active: boolean; 
-  plan?: "monthly"|"annual"; 
-  currentPeriodEnd?: number 
-}> {
-  const statusUrl = u(`/api/subscription/status?userId=${encodeURIComponent(userId)}`);
-  console.debug('[API] Checking subscription status:', statusUrl);
+/**
+ * Analyze gym machine image
+ */
+export async function analyzeImage(payload: AnalyzeRequest): Promise<ApiResponse<AnalyzeResponse>> {
+  const start = Date.now();
+  const url = `${config.backend.apiBaseUrl}/api/analyze`;
   
-  const r = await fetch(statusUrl);
-  if (!r.ok) {
-    console.error('[API] Subscription status failed:', r.status, r.statusText);
-    throw new Error(`HTTP ${r.status}: ${r.statusText}`);
+  try {
+    // Create FormData for multipart upload
+    const formData = new FormData();
+    formData.append('image', payload.image, 'scan.webp');
+    
+    if (payload.metadata) {
+      formData.append('metadata', JSON.stringify(payload.metadata));
+    }
+    
+    const { res, ms, requestId } = await timedFetch(url, {
+      method: 'POST',
+      body: formData,
+      timeoutMs: 30000, // 30s timeout for analysis
+      headers: {
+        'Accept': 'application/json'
+      }
+    });
+    
+    const timeMs = Date.now() - start;
+    
+    if (res.ok) {
+      const data = await res.json();
+      console.log('[api] Analyze success:', { url, method: 'POST', status: res.status, timeMs, requestId });
+      
+      return {
+        success: true,
+        data,
+        status: res.status,
+        requestId,
+        responseTime: timeMs
+      };
+    } else {
+      const errorText = await res.text().catch(() => 'Unknown error');
+      console.error('[api] Analyze failed:', { url, method: 'POST', status: res.status, timeMs, requestId, error: errorText });
+      
+      return {
+        success: false,
+        error: errorText,
+        status: res.status,
+        requestId,
+        responseTime: timeMs
+      };
+    }
+  } catch (error) {
+    const timeMs = Date.now() - start;
+    const errorMessage = error instanceof Error ? error.message : 'Network error';
+    console.error('[api] Analyze error:', { url, method: 'POST', status: 0, timeMs, error: errorMessage });
+    
+    return {
+      success: false,
+      error: errorMessage,
+      status: 0,
+      requestId: 'unknown',
+      responseTime: timeMs
+    };
   }
-  
-  const data = await r.json();
-  console.debug('[API] Subscription status response:', data);
-  return data;
 }
 
-// STRIPE: Get Stripe price configuration status
-export async function getStripePrices() {
-  const pricesUrl = u('/api/stripe/prices');
-  console.debug('[API] Fetching Stripe prices from:', pricesUrl);
+/**
+ * Get user profile and subscription status
+ */
+export async function getUserProfile(): Promise<ApiResponse<{
+  isPremium: boolean;
+  scanCount: number;
+  freeQuota: number;
+  subscriptionStatus?: string;
+}>> {
+  const start = Date.now();
+  const url = `${config.backend.apiBaseUrl}/api/me`;
   
-  const r = await fetch(pricesUrl);
-  if (!r.ok) {
-    console.error('[API] Failed to fetch Stripe prices:', r.status, r.statusText);
-    throw new Error("Failed to fetch Stripe prices");
+  try {
+    const { res, ms, requestId } = await timedFetch(url, {
+      method: 'GET',
+      timeoutMs: 10000,
+      headers: {
+        'Accept': 'application/json'
+      }
+    });
+    
+    const timeMs = Date.now() - start;
+    
+    if (res.ok) {
+      const data = await res.json();
+      console.log('[api] Profile success:', { url, method: 'GET', status: res.status, timeMs, requestId });
+      
+      return {
+        success: true,
+        data,
+        status: res.status,
+        requestId,
+        responseTime: timeMs
+      };
+    } else {
+      const errorText = await res.text().catch(() => 'Unknown error');
+      console.error('[api] Profile failed:', { url, method: 'GET', status: res.status, timeMs, requestId, error: errorText });
+      
+      return {
+        success: false,
+        error: errorText,
+        status: res.status,
+        requestId,
+        responseTime: timeMs
+      };
+    }
+  } catch (error) {
+    const timeMs = Date.now() - start;
+    const errorMessage = error instanceof Error ? error.message : 'Network error';
+    console.error('[api] Profile error:', { url, method: 'GET', status: 0, timeMs, error: errorMessage });
+    
+    return {
+      success: false,
+      error: errorMessage,
+      status: 0,
+      requestId: 'unknown',
+      responseTime: timeMs
+    };
   }
-  
-  const data = await r.json();
-  console.debug('[API] Stripe prices response:', data);
-  return data;
 }

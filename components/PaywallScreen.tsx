@@ -27,7 +27,7 @@ import Animated, {
   ZoomIn,
 } from 'react-native-reanimated';
 import * as WebBrowser from 'expo-web-browser';
-import { createCheckout, getProducts, API_BASE, getSubscriptionStatus, assertApiReachable, ENV_MONTHLY, ENV_ANNUAL, WEB_ORIGIN } from '../src/lib/api';
+import { createCheckout, getProducts, API_BASE, getSubscriptionStatus, assertApiReachable, ENV_MONTHLY, ENV_ANNUAL, WEB_ORIGIN } from '../src/lib/apiLegacy';
 import { getIdentity, setUserEmail } from '../src/lib/identity';
 
 const { width, height } = Dimensions.get('window');

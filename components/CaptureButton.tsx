@@ -29,6 +29,23 @@ export function CaptureButton({ onPress, disabled, testID, style, children }: Pr
   };
 
   if (Platform.OS === 'web') {
+    // Fix: Safe style handling - no indexed access, no unsafe spreads
+    const webStyles: React.CSSProperties = {
+      cursor: disabled ? 'not-allowed' : 'pointer',
+      background: 'transparent',
+      border: 0,
+      padding: 0,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      userSelect: 'none',
+      WebkitUserSelect: 'none',
+      MozUserSelect: 'none',
+      msUserSelect: 'none',
+      // Safe style merging
+      ...(style && typeof style === 'object' && !Array.isArray(style) ? style : {})
+    };
+
     return (
       <button
         type="button"
@@ -61,21 +78,16 @@ export function CaptureButton({ onPress, disabled, testID, style, children }: Pr
             handlePress(e); 
           }
         }}
-        disabled={disabled}
-        style={{
-          cursor: disabled ? 'not-allowed' : 'pointer',
-          background: 'transparent',
-          border: 0,
-          padding: 0,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          userSelect: 'none',
-          WebkitUserSelect: 'none',
-          MozUserSelect: 'none',
-          msUserSelect: 'none',
-          ...style
+        // Fix: Add pointer events for robust event handling
+        onPointerDown={(e) => {
+          console.debug('[capture] web onPointerDown', { type: e.type, disabled });
+          if (!disabled) {
+            e.preventDefault();
+            handlePress(e);
+          }
         }}
+        disabled={disabled}
+        style={webStyles}
       >
         {children || <CameraIcon color="white" size={32} />}
       </button>

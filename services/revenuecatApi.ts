@@ -1,4 +1,4 @@
-import { API_BASE } from '../src/lib/api';
+import { API_BASE } from '../src/lib/apiLegacy';
 
 export async function fetchRevenueCatOfferings() {
   const response = await fetch(`${API_BASE}/api/revenuecat/offerings`);

@@ -36,12 +36,7 @@ const getEnvVar = (key: string): string => {
     return webConfig[key] || '';
   }
   
-  // For native environment, try Constants.expoConfig.extra
-  if (Constants.expoConfig?.extra?.[key]) {
-    return Constants.expoConfig.extra[key];
-  }
-  
-  // Fallback to process.env
+  // Fallback to process.env for native
   if (typeof process !== 'undefined' && process.env?.[key]) {
     return process.env[key];
   }

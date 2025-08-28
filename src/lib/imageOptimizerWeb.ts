@@ -50,7 +50,10 @@ export async function downscaleImage(
     // Convert to blob with appropriate format
     const mimeType = format === 'webp' ? 'image/webp' : 'image/jpeg';
     const blob = await new Promise<Blob>((resolve, reject) => {
-      canvas.toBlob(resolve, mimeType, quality);
+      canvas.toBlob((blob) => {
+        if (blob) resolve(blob);
+        else reject(new Error('Failed to create blob'));
+      }, mimeType, quality);
     });
     
     if (!blob) {

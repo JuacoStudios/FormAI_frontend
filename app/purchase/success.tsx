@@ -4,7 +4,7 @@ import { useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import { CheckCircle, Home, RefreshCw } from "lucide-react-native";
 import { getIdentity } from "../../src/lib/identity";
-import { getSubscriptionStatus } from "../../src/lib/api";
+import { getSubscriptionStatus } from "../../src/lib/apiLegacy";
 
 export default function PurchaseSuccess() {
   const router = useRouter();
