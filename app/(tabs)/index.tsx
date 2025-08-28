@@ -11,6 +11,10 @@ import PaywallScreen from '@/components/PaywallScreen';
 import { Linking } from 'react-native';
 import { usePlatform } from '@/hooks/usePlatform';
 import WebCameraFallback from '@/components/WebCameraFallback';
+// PERF: Import optimized utilities
+import { timedFetch, retryFetch } from '@/src/lib/net';
+import { optimizeImage, formatFileSize } from '@/src/lib/imageOptimizer';
+import { validateApi, getApiErrorMessage } from '@/src/lib/healthCheck';
 
 // Layout constants for responsive design
 const FAB_SIZE = 80;            // px, actual rendered size of the green capture button
@@ -69,6 +73,17 @@ export default function ScanScreen() {
     console.log('🔍 Scan screen mounted');
     loadScanCount();
     checkFirstTimeUser();
+    
+    // PERF: Validate API health on mount
+    validateApi().then(validation => {
+      if (!validation.overall) {
+        console.warn('⚠️ API validation failed on mount:', validation);
+      } else {
+        console.log('✅ API validation successful on mount');
+      }
+    }).catch(error => {
+      console.error('❌ API validation error on mount:', error);
+    });
   }, []);
 
   // Check if this is the first time the user opens the app
@@ -284,6 +299,15 @@ export default function ScanScreen() {
     setResult(null);
     
     try {
+      // PERF: Validate API before proceeding
+      console.log('🔍 Validating API health...');
+      const apiValidation = await validateApi();
+      
+      if (!apiValidation.overall) {
+        const errorMessage = getApiErrorMessage(apiValidation.health);
+        throw new Error(`API validation failed: ${errorMessage}`);
+      }
+      
       console.log('📸 Capturando imagen...');
       const photo = await cameraRef.current.takePictureAsync({
         base64: true,
@@ -298,41 +322,48 @@ export default function ScanScreen() {
       
       console.log('✅ Imagen capturada, preparando para API...');
       
-      // Prepara la imagen para el backend
-      const blob = base64ToBlob(photo.base64, 'image/jpeg');
-      console.log('📦 Blob creado:', blob.size, 'bytes');
+      // PERF: Optimize image before upload
+      const originalBlob = base64ToBlob(photo.base64, 'image/jpeg');
+      console.log('📦 Original blob:', formatFileSize(originalBlob.size));
       
+      const { blob: optimizedBlob, sizeReduction } = await optimizeImage(originalBlob, {
+        maxDimension: 1024,
+        quality: 0.8,
+        format: 'webp'
+      });
+      
+      console.log('📦 Optimized blob:', formatFileSize(optimizedBlob.size));
+      if (sizeReduction > 0) {
+        console.log('📦 Size reduction:', formatFileSize(sizeReduction));
+      }
+      
+      // PERF: Use multipart form data with optimized image
       const formData = new FormData();
-      formData.append('image', blob, 'equipment.jpg');
+      formData.append('image', optimizedBlob, 'scan.webp');
       
       const requestUrl = `${config.backend.apiBaseUrl}/analyze`;
       console.log('🌐 Enviando a:', requestUrl);
       
-      // Verificar conectividad antes de hacer la llamada
-      try {
-        const testResponse = await fetch(requestUrl, { method: 'HEAD' });
-        console.log('✅ Backend reachable, status:', testResponse.status);
-      } catch (connectError) {
-        console.error('❌ Backend not reachable:', connectError);
-        throw new Error('No se puede conectar al servidor. Verifica tu conexión a internet.');
-      }
-      
-      // Llama a la API y espera la respuesta
-      const response = await fetch(requestUrl, {
+      // PERF: Use timedFetch with retry logic
+      const { res: response, ms: responseTime, requestId } = await retryFetch(requestUrl, {
         method: 'POST',
         body: formData,
         headers: {
           'Accept': 'application/json',
         },
+        timeoutMs: 15000,
+        maxRetries: 2
       });
       
-      const responseText = await response.text();
-      console.log('📡 Respuesta del servidor:', response.status, responseText);
+      console.log(`📡 Response received in ${responseTime}ms, requestId: ${requestId}`);
       
       if (!response.ok) {
         console.error('❌ Error HTTP:', response.status, response.statusText);
-        throw new Error(`Error en el backend: ${response.status} - ${responseText}`);
+        throw new Error(`Error en el backend: ${response.status} - ${response.statusText}`);
       }
+      
+      const responseText = await response.text();
+      console.log('📡 Respuesta del servidor:', response.status, responseText);
       
       let data;
       try {
@@ -371,7 +402,23 @@ export default function ScanScreen() {
       
     } catch (error) {
       console.error('❌ Error completo:', error);
-      setResult(error instanceof Error ? error.message : 'Error al analizar la imagen. Por favor, intenta de nuevo.');
+      
+      // PERF: Show user-friendly error messages
+      let userMessage = 'Error al analizar la imagen. Por favor, intenta de nuevo.';
+      
+      if (error instanceof Error) {
+        if (error.message.includes('timeout')) {
+          userMessage = 'La solicitud tardó demasiado. Intenta con una imagen más pequeña.';
+        } else if (error.message.includes('404')) {
+          userMessage = 'API no encontrada. Contacta al soporte técnico.';
+        } else if (error.message.includes('API validation failed')) {
+          userMessage = 'Problema de conexión con el servidor. Verifica tu internet.';
+        } else {
+          userMessage = error.message;
+        }
+      }
+      
+      setResult(userMessage);
     } finally {
       setAnalyzing(false);
       console.log('🏁 Análisis completado');
@@ -417,7 +464,7 @@ export default function ScanScreen() {
     hidePaywall(true);
   };
 
-  // Función para manejar captura de imagen desde web
+  // PERF: Función para manejar captura de imagen desde web con optimizaciones
   const handleWebImageCapture = async (base64: string) => {
     console.log('📸 handleWebImageCapture started');
     
@@ -435,43 +482,59 @@ export default function ScanScreen() {
     setResult(null);
     
     try {
+      // PERF: Validate API before proceeding
+      console.log('🔍 Validating API health...');
+      const apiValidation = await validateApi();
+      
+      if (!apiValidation.overall) {
+        const errorMessage = getApiErrorMessage(apiValidation.health);
+        throw new Error(`API validation failed: ${errorMessage}`);
+      }
+      
       console.log('✅ Imagen capturada desde web, preparando para API...');
       
-      // Prepara la imagen para el backend
-      const blob = base64ToBlob(base64, 'image/jpeg');
-      console.log('📦 Blob creado:', blob.size, 'bytes');
+      // PERF: Optimize image before upload
+      const originalBlob = base64ToBlob(base64, 'image/jpeg');
+      console.log('📦 Original blob:', formatFileSize(originalBlob.size));
       
+      const { blob: optimizedBlob, sizeReduction } = await optimizeImage(originalBlob, {
+        maxDimension: 1024,
+        quality: 0.8,
+        format: 'webp'
+      });
+      
+      console.log('📦 Optimized blob:', formatFileSize(optimizedBlob.size));
+      if (sizeReduction > 0) {
+        console.log('📦 Size reduction:', formatFileSize(sizeReduction));
+      }
+      
+      // PERF: Use multipart form data with optimized image
       const formData = new FormData();
-      formData.append('image', blob, 'equipment.jpg');
+      formData.append('image', optimizedBlob, 'scan.webp');
       
       const requestUrl = `${config.backend.apiBaseUrl}/analyze`;
       console.log('🌐 Enviando a:', requestUrl);
       
-      // Verificar conectividad antes de hacer la llamada
-      try {
-        const testResponse = await fetch(requestUrl, { method: 'HEAD' });
-        console.log('✅ Backend reachable, status:', testResponse.status);
-      } catch (connectError) {
-        console.error('❌ Backend not reachable:', connectError);
-        throw new Error('No se puede conectar al servidor. Verifica tu conexión a internet.');
-      }
-      
-      // Llama a la API y espera la respuesta
-      const response = await fetch(requestUrl, {
+      // PERF: Use timedFetch with retry logic
+      const { res: response, ms: responseTime, requestId } = await retryFetch(requestUrl, {
         method: 'POST',
         body: formData,
         headers: {
           'Accept': 'application/json',
         },
+        timeoutMs: 15000,
+        maxRetries: 2
       });
       
-      const responseText = await response.text();
-      console.log('📡 Respuesta del servidor:', response.status, responseText);
+      console.log(`📡 Response received in ${responseTime}ms, requestId: ${requestId}`);
       
       if (!response.ok) {
         console.error('❌ Error HTTP:', response.status, response.statusText);
-        throw new Error(`Error en el backend: ${response.status} - ${responseText}`);
+        throw new Error(`Error en el backend: ${response.status} - ${response.statusText}`);
       }
+      
+      const responseText = await response.text();
+      console.log('📡 Respuesta del servidor:', response.status, responseText);
       
       let data;
       try {
@@ -493,7 +556,22 @@ export default function ScanScreen() {
       
     } catch (error) {
       console.error('❌ Error en handleWebImageCapture:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+      
+      // PERF: Show user-friendly error messages
+      let errorMessage = 'Error desconocido';
+      
+      if (error instanceof Error) {
+        if (error.message.includes('timeout')) {
+          errorMessage = 'La solicitud tardó demasiado. Intenta con una imagen más pequeña.';
+        } else if (error.message.includes('404')) {
+          errorMessage = 'API no encontrada. Contacta al soporte técnico.';
+        } else if (error.message.includes('API validation failed')) {
+          errorMessage = 'Problema de conexión con el servidor. Verifica tu internet.';
+        } else {
+          errorMessage = error.message;
+        }
+      }
+      
       Alert.alert('Error', errorMessage);
     } finally {
       setAnalyzing(false);

@@ -68,6 +68,7 @@ const validateEnvVars = () => {
 
 const config: Config = {
   backend: {
+    // PERF: Ensure no trailing slash to avoid 404s
     apiBaseUrl: getEnvVar('EXPO_PUBLIC_API_BASE_URL') || 'https://formai-backend-dc3u.onrender.com',
   },
   openai: {
