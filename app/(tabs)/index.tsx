@@ -11,10 +11,10 @@ import PaywallScreen from '@/components/PaywallScreen';
 import { Linking } from 'react-native';
 import { usePlatform } from '@/hooks/usePlatform';
 import WebCameraFallback from '@/components/WebCameraFallback';
-// PERF: Import optimized utilities
-import { timedFetch, retryFetch } from '@/src/lib/net';
-import { optimizeImage, formatFileSize } from '@/src/lib/imageOptimizer';
-import { validateApi, getApiErrorMessage } from '@/src/lib/healthCheck';
+// PERF: Import web-safe optimized utilities
+import { timedFetch, retryFetch } from '@/src/lib/timedFetch';
+import { optimizeImage, formatFileSize } from '@/src/lib/imageOptimizerWeb';
+import { validateApi, getApiErrorMessage } from '@/src/lib/healthCheckWeb';
 
 // Layout constants for responsive design
 const FAB_SIZE = 80;            // px, actual rendered size of the green capture button

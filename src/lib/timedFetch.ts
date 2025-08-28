@@ -1,4 +1,6 @@
-// PERF: Network utility for optimized API calls with timing and request tracking
+// Web-safe timed fetch using AbortController + setTimeout
+// Compatible with Expo Web export and Vercel builds
+
 export interface TimedFetchResult {
   res: Response;
   ms: number;
@@ -12,40 +14,61 @@ export interface TimedFetchOptions extends RequestInit {
 }
 
 /**
- * Enhanced fetch with timing, request IDs, and timeout handling
+ * Generate a unique request ID that works in all environments
+ */
+function generateRequestId(): string {
+  // Use crypto.randomUUID if available, otherwise fallback to timestamp + random
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  
+  // Fallback for environments without crypto.randomUUID
+  const timestamp = Date.now();
+  const random = Math.random().toString(36).substring(2, 15);
+  return `${timestamp}-${random}`;
+}
+
+/**
+ * Web-safe timed fetch implementation
  */
 export async function timedFetch(
-  input: RequestInfo, 
+  input: RequestInfo | URL,
   init: TimedFetchOptions = {}
 ): Promise<TimedFetchResult> {
-  const requestId = crypto?.randomUUID?.() ?? String(Date.now());
-  const start = performance.now();
-  const controller = new AbortController();
+  const requestId = generateRequestId();
+  const start = typeof performance !== 'undefined' ? performance.now() : Date.now();
   
-  // Set timeout
-  const timeout = setTimeout(() => controller.abort(), init.timeoutMs ?? 15000);
+  // Only use AbortController in browser environments
+  let controller: AbortController | undefined;
+  let timeout: NodeJS.Timeout | undefined;
   
   try {
+    if (typeof AbortController !== 'undefined') {
+      controller = new AbortController();
+      timeout = setTimeout(() => controller!.abort(), init.timeoutMs ?? 15000);
+    }
+    
     // Add request ID header
     const headers = new Headers(init.headers);
     headers.set('x-request-id', requestId);
     
-    const res = await fetch(input, { 
-      ...init, 
-      signal: controller.signal, 
-      headers 
-    });
+    const fetchOptions = { ...init, headers };
+    if (controller) {
+      fetchOptions.signal = controller.signal;
+    }
     
-    clearTimeout(timeout);
-    const ms = Math.round(performance.now() - start);
+    const res = await fetch(input, fetchOptions);
+    
+    if (timeout) clearTimeout(timeout);
+    const ms = Math.round((typeof performance !== 'undefined' ? performance.now() : Date.now()) - start);
     
     // Log performance metrics
     console.debug('[net]', requestId, res.status, res.url, `${ms}ms`, res.headers.get('server-timing') ?? '');
     
     return { res, ms, requestId };
   } catch (error) {
-    clearTimeout(timeout);
-    const ms = Math.round(performance.now() - start);
+    if (timeout) clearTimeout(timeout);
+    const ms = Math.round((typeof performance !== 'undefined' ? performance.now() : Date.now()) - start);
     
     if (error instanceof Error && error.name === 'AbortError') {
       console.error('[net]', requestId, 'TIMEOUT', `${ms}ms`);
@@ -61,7 +84,7 @@ export async function timedFetch(
  * Retry wrapper with exponential backoff
  */
 export async function retryFetch(
-  input: RequestInfo,
+  input: RequestInfo | URL,
   init: TimedFetchOptions = {},
   retryCount = 0
 ): Promise<TimedFetchResult> {

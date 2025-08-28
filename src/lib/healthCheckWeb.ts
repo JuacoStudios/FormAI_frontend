@@ -1,7 +1,8 @@
-// PERF: Health check utilities for API validation and route verification
+// PERF: Web-safe health check utilities for API validation and route verification
+// Compatible with Expo Web export and Vercel builds
 
-import config from '../config';
-import { timedFetch } from './net';
+import config from '../../app/config';
+import { timedFetch } from './timedFetch';
 
 export interface HealthCheckResult {
   ok: boolean;
@@ -13,9 +14,27 @@ export interface HealthCheckResult {
 }
 
 /**
- * Verify API is reachable and get health status
+ * Check if we're in a browser environment
+ */
+function isBrowser(): boolean {
+  return typeof window !== 'undefined' && typeof fetch !== 'undefined';
+}
+
+/**
+ * Verify API is reachable and get health status (browser-safe)
  */
 export async function assertApiReachable(): Promise<HealthCheckResult> {
+  // Only run health checks in browser environments
+  if (!isBrowser()) {
+    console.log('[health] Skipping health check in non-browser environment');
+    return {
+      ok: true, // Assume OK during build
+      status: 200,
+      responseTime: 0,
+      requestId: 'build-time'
+    };
+  }
+  
   const healthUrl = `${config.backend.apiBaseUrl}/health`;
   
   try {
@@ -63,9 +82,15 @@ export async function assertApiReachable(): Promise<HealthCheckResult> {
 }
 
 /**
- * Validate specific API endpoint exists
+ * Validate specific API endpoint exists (browser-safe)
  */
 export async function validateEndpoint(endpoint: string): Promise<boolean> {
+  // Only run validation in browser environments
+  if (!isBrowser()) {
+    console.log('[health] Skipping endpoint validation in non-browser environment');
+    return true; // Assume exists during build
+  }
+  
   try {
     const url = `${config.backend.apiBaseUrl}${endpoint}`;
     console.log('[health] Validating endpoint:', url);
@@ -86,13 +111,23 @@ export async function validateEndpoint(endpoint: string): Promise<boolean> {
 }
 
 /**
- * Comprehensive API validation
+ * Comprehensive API validation (browser-safe)
  */
 export async function validateApi(): Promise<{
   health: HealthCheckResult;
   analyzeEndpoint: boolean;
   overall: boolean;
 }> {
+  // Only run validation in browser environments
+  if (!isBrowser()) {
+    console.log('[health] Skipping API validation in non-browser environment');
+    return {
+      health: { ok: true, status: 200, responseTime: 0, requestId: 'build-time' },
+      analyzeEndpoint: true,
+      overall: true
+    };
+  }
+  
   console.log('[health] Starting comprehensive API validation...');
   
   const health = await assertApiReachable();
