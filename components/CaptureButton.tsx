@@ -31,8 +31,11 @@ export function CaptureButton({ onPress, disabled, testID, style, children }: Pr
   if (Platform.OS === 'web') {
     // Fix: Safe style handling - no indexed access, no unsafe spreads
     const webStyles: React.CSSProperties = {
+      width: 72,
+      height: 72,
+      borderRadius: 36,
+      backgroundColor: disabled ? '#22c55e80' : '#22c55e', // Green as requested
       cursor: disabled ? 'not-allowed' : 'pointer',
-      background: 'transparent',
       border: 0,
       padding: 0,
       display: 'flex',
@@ -42,6 +45,7 @@ export function CaptureButton({ onPress, disabled, testID, style, children }: Pr
       WebkitUserSelect: 'none',
       MozUserSelect: 'none',
       msUserSelect: 'none',
+      boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
       // Safe style merging
       ...(style && typeof style === 'object' && !Array.isArray(style) ? style : {})
     };
@@ -100,7 +104,22 @@ export function CaptureButton({ onPress, disabled, testID, style, children }: Pr
       onPress={handlePress}
       disabled={disabled}
       testID={testID ?? 'capture-btn'}
-      style={style}
+      style={[
+        {
+          width: 72,
+          height: 72,
+          borderRadius: 36,
+          backgroundColor: disabled ? '#22c55e80' : '#22c55e', // Green as requested
+          justifyContent: 'center',
+          alignItems: 'center',
+          shadowColor: '#000',
+          shadowOpacity: 0.3,
+          shadowOffset: { width: 0, height: 4 },
+          shadowRadius: 12,
+          elevation: 6,
+        },
+        style
+      ]}
       activeOpacity={0.7}
     >
       {children || <CameraIcon color="white" size={32} />}

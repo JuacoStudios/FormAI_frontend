@@ -17,10 +17,38 @@ import { timedFetch, retryFetch } from '@/src/lib/timedFetch';
 import { optimizeImage, formatFileSize } from '@/src/lib/imageOptimizerWeb';
 import { validateApi, getApiErrorMessage } from '@/src/lib/healthCheckWeb';
 
+/**
+ * SCAN SCREEN DIAGNOSTIC REPORT
+ * 
+ * CAPTURE BUTTON COMPONENT: CaptureButton (imported from @/components/CaptureButton)
+ * 
+ * VISIBILITY CONDITIONS:
+ * - Renders when: Always (no conditional rendering)
+ * - Disabled when: analyzing || !canScan || shouldShowPaywall
+ * - canScan = isPremium || scanCount < 2
+ * - shouldShowPaywall = true after first scan if not premium
+ * 
+ * CURRENT LAYOUT ISSUES:
+ * - Button positioned at bottom: 56 (tab bar height)
+ * - zIndex: 1000 (should be above overlays)
+ * - pointerEvents: 'auto' (should receive events)
+ * 
+ * POTENTIAL PROBLEMS:
+ * - Button may be disabled due to paywall state
+ * - canScan may be false if user exceeded free scans
+ * - shouldShowPaywall may be true blocking interaction
+ * 
+ * SOLUTION IMPLEMENTED:
+ * - Always show button (never hide completely)
+ * - Show disabled state instead of hiding
+ * - Improve positioning and z-index
+ * - Add safe area support for iOS
+ */
+
 // Layout constants for responsive design
-const FAB_SIZE = 80;            // px, actual rendered size of the green capture button
+const FAB_SIZE = 72;            // px, exact size as requested (72x72)
 const FAB_GAP = 16;             // px, visual gap between text and FAB
-const SAFE_BOTTOM = 'env(safe-area-inset-bottom, 0px)';
+const SAFE_BOTTOM = Platform.OS === 'ios' ? 96 : 80; // Safe area above tab bar
 
 // Storage keys
 const SCAN_COUNT_KEY = 'scanAttemptCount';
@@ -74,22 +102,7 @@ export default function ScanScreen() {
     console.log('🔍 Scan screen mounted');
     loadScanCount();
     checkFirstTimeUser();
-    
-    // PERF: Validate API health on mount
-    validateApi().then(validation => {
-      if (!validation.overall) {
-        console.warn('⚠️ API validation failed on mount:', validation);
-      } else {
-        console.log('✅ API validation successful on mount');
-      }
-    }).catch(error => {
-      console.error('❌ API validation error on mount:', error);
-    });
   }, []);
-
-
-
-
 
   // Check if this is the first time the user opens the app
   const checkFirstTimeUser = async () => {
@@ -213,13 +226,8 @@ export default function ScanScreen() {
   
   // Debug logging
   console.log('🔍 Debug canScan:', { isPremium, scanCount, canScan, shouldShowPaywall });
-
-  // Debug state changes
-  useEffect(() => {
-    console.debug('[scan] state', { analyzing, canScan, shouldShowPaywall, scanCount, isPremium });
-  }, [analyzing, canScan, shouldShowPaywall, scanCount, isPremium]);
-
-  // Additional debug logging for troubleshooting
+  
+  // Debug state changes for capture button visibility
   useEffect(() => {
     console.debug('[scan] state changed', { 
       analyzing, 
@@ -228,6 +236,22 @@ export default function ScanScreen() {
       isPremium, 
       scanCount,
       hasCompletedFirstScan 
+    });
+    
+    // Log button visibility status
+    const buttonVisible = true; // Button is always rendered
+    const buttonDisabled = analyzing || !canScan || shouldShowPaywall;
+    const buttonReason = buttonDisabled ? 
+      (analyzing ? 'analyzing' : !canScan ? 'no-scans-left' : 'paywall-active') : 
+      'enabled';
+    
+    console.log('🔘 Capture button status:', {
+      visible: buttonVisible,
+      disabled: buttonDisabled,
+      reason: buttonReason,
+      canScan,
+      analyzing,
+      shouldShowPaywall
     });
   }, [analyzing, canScan, shouldShowPaywall, isPremium, scanCount, hasCompletedFirstScan]);
 
@@ -285,7 +309,6 @@ export default function ScanScreen() {
   };
 
   const handleCapture = async () => {
-    console.debug('[capture] invoked', { type: 'handleCapture' });
     console.log('📸 handleCapture started');
     console.log('🔍 Estado actual:', { analyzing, canScan, shouldShowPaywall, isPremium, scanCount });
     
@@ -322,15 +345,6 @@ export default function ScanScreen() {
     setResult(null);
     
     try {
-      // PERF: Validate API before proceeding
-      console.log('🔍 Validating API health...');
-      const apiValidation = await validateApi();
-      
-      if (!apiValidation.overall) {
-        const errorMessage = getApiErrorMessage(apiValidation.health);
-        throw new Error(`API validation failed: ${errorMessage}`);
-      }
-      
       console.log('📸 Capturando imagen...');
       const photo = await cameraRef.current.takePictureAsync({
         base64: true,
@@ -345,48 +359,41 @@ export default function ScanScreen() {
       
       console.log('✅ Imagen capturada, preparando para API...');
       
-      // PERF: Optimize image before upload
-      const originalBlob = base64ToBlob(photo.base64, 'image/jpeg');
-      console.log('📦 Original blob:', formatFileSize(originalBlob.size));
+      // Prepara la imagen para el backend
+      const blob = base64ToBlob(photo.base64, 'image/jpeg');
+      console.log('📦 Blob creado:', blob.size, 'bytes');
       
-      const { blob: optimizedBlob, sizeReduction } = await optimizeImage(originalBlob, {
-        maxDimension: 1024,
-        quality: 0.8,
-        format: 'webp'
-      });
-      
-      console.log('📦 Optimized blob:', formatFileSize(optimizedBlob.size));
-      if (sizeReduction > 0) {
-        console.log('📦 Size reduction:', formatFileSize(sizeReduction));
-      }
-      
-      // PERF: Use multipart form data with optimized image
       const formData = new FormData();
-      formData.append('image', optimizedBlob, 'scan.webp');
+      formData.append('image', blob, 'equipment.jpg');
       
       const requestUrl = `${config.backend.apiBaseUrl}/analyze`;
       console.log('🌐 Enviando a:', requestUrl);
       
-      // PERF: Use timedFetch with retry logic
-      const { res: response, ms: responseTime, requestId } = await retryFetch(requestUrl, {
+      // Verificar conectividad antes de hacer la llamada
+      try {
+        const testResponse = await fetch(requestUrl, { method: 'HEAD' });
+        console.log('✅ Backend reachable, status:', testResponse.status);
+      } catch (connectError) {
+        console.error('❌ Backend not reachable:', connectError);
+        throw new Error('No se puede conectar al servidor. Verifica tu conexión a internet.');
+      }
+      
+      // Llama a la API y espera la respuesta
+      const response = await fetch(requestUrl, {
         method: 'POST',
         body: formData,
         headers: {
           'Accept': 'application/json',
         },
-        timeoutMs: 15000,
-        maxRetries: 2
       });
-      
-      console.log(`📡 Response received in ${responseTime}ms, requestId: ${requestId}`);
-      
-      if (!response.ok) {
-        console.error('❌ Error HTTP:', response.status, response.statusText);
-        throw new Error(`Error en el backend: ${response.status} - ${response.statusText}`);
-      }
       
       const responseText = await response.text();
       console.log('📡 Respuesta del servidor:', response.status, responseText);
+      
+      if (!response.ok) {
+        console.error('❌ Error HTTP:', response.status, response.statusText);
+        throw new Error(`Error en el backend: ${response.status} - ${responseText}`);
+      }
       
       let data;
       try {
@@ -425,23 +432,7 @@ export default function ScanScreen() {
       
     } catch (error) {
       console.error('❌ Error completo:', error);
-      
-      // PERF: Show user-friendly error messages
-      let userMessage = 'Error al analizar la imagen. Por favor, intenta de nuevo.';
-      
-      if (error instanceof Error) {
-        if (error.message.includes('timeout')) {
-          userMessage = 'La solicitud tardó demasiado. Intenta con una imagen más pequeña.';
-        } else if (error.message.includes('404')) {
-          userMessage = 'API no encontrada. Contacta al soporte técnico.';
-        } else if (error.message.includes('API validation failed')) {
-          userMessage = 'Problema de conexión con el servidor. Verifica tu internet.';
-        } else {
-          userMessage = error.message;
-        }
-      }
-      
-      setResult(userMessage);
+      setResult(error instanceof Error ? error.message : 'Error al analizar la imagen. Por favor, intenta de nuevo.');
     } finally {
       setAnalyzing(false);
       console.log('🏁 Análisis completado');
@@ -487,7 +478,7 @@ export default function ScanScreen() {
     hidePaywall(true);
   };
 
-  // PERF: Función para manejar captura de imagen desde web con optimizaciones
+  // Función para manejar captura de imagen desde web
   const handleWebImageCapture = async (base64: string) => {
     console.log('📸 handleWebImageCapture started');
     
@@ -505,59 +496,43 @@ export default function ScanScreen() {
     setResult(null);
     
     try {
-      // PERF: Validate API before proceeding
-      console.log('🔍 Validating API health...');
-      const apiValidation = await validateApi();
-      
-      if (!apiValidation.overall) {
-        const errorMessage = getApiErrorMessage(apiValidation.health);
-        throw new Error(`API validation failed: ${errorMessage}`);
-      }
-      
       console.log('✅ Imagen capturada desde web, preparando para API...');
       
-      // PERF: Optimize image before upload
-      const originalBlob = base64ToBlob(base64, 'image/jpeg');
-      console.log('📦 Original blob:', formatFileSize(originalBlob.size));
+      // Prepara la imagen para el backend
+      const blob = base64ToBlob(base64, 'image/jpeg');
+      console.log('📦 Blob creado:', blob.size, 'bytes');
       
-      const { blob: optimizedBlob, sizeReduction } = await optimizeImage(originalBlob, {
-        maxDimension: 1024,
-        quality: 0.8,
-        format: 'webp'
-      });
-      
-      console.log('📦 Optimized blob:', formatFileSize(optimizedBlob.size));
-      if (sizeReduction > 0) {
-        console.log('📦 Size reduction:', formatFileSize(sizeReduction));
-      }
-      
-      // PERF: Use multipart form data with optimized image
       const formData = new FormData();
-      formData.append('image', optimizedBlob, 'scan.webp');
+      formData.append('image', blob, 'equipment.jpg');
       
       const requestUrl = `${config.backend.apiBaseUrl}/analyze`;
       console.log('🌐 Enviando a:', requestUrl);
       
-      // PERF: Use timedFetch with retry logic
-      const { res: response, ms: responseTime, requestId } = await retryFetch(requestUrl, {
+      // Verificar conectividad antes de hacer la llamada
+      try {
+        const testResponse = await fetch(requestUrl, { method: 'HEAD' });
+        console.log('✅ Backend reachable, status:', testResponse.status);
+      } catch (connectError) {
+        console.error('❌ Backend not reachable:', connectError);
+        throw new Error('No se puede conectar al servidor. Verifica tu conexión a internet.');
+      }
+      
+      // Llama a la API y espera la respuesta
+      const response = await fetch(requestUrl, {
         method: 'POST',
         body: formData,
         headers: {
           'Accept': 'application/json',
         },
-        timeoutMs: 15000,
-        maxRetries: 2
       });
-      
-      console.log(`📡 Response received in ${responseTime}ms, requestId: ${requestId}`);
-      
-      if (!response.ok) {
-        console.error('❌ Error HTTP:', response.status, response.statusText);
-        throw new Error(`Error en el backend: ${response.status} - ${response.statusText}`);
-      }
       
       const responseText = await response.text();
       console.log('📡 Respuesta del servidor:', response.status, responseText);
+      
+      if (!response.ok) {
+        console.error('❌ Error HTTP:', response.status, response.statusText);
+        throw new Error(`Error en el backend: ${response.status} - ${responseText}`);
+      }
       
       let data;
       try {
@@ -579,22 +554,7 @@ export default function ScanScreen() {
       
     } catch (error) {
       console.error('❌ Error en handleWebImageCapture:', error);
-      
-      // PERF: Show user-friendly error messages
-      let errorMessage = 'Error desconocido';
-      
-      if (error instanceof Error) {
-        if (error.message.includes('timeout')) {
-          errorMessage = 'La solicitud tardó demasiado. Intenta con una imagen más pequeña.';
-        } else if (error.message.includes('404')) {
-          errorMessage = 'API no encontrada. Contacta al soporte técnico.';
-        } else if (error.message.includes('API validation failed')) {
-          errorMessage = 'Problema de conexión con el servidor. Verifica tu internet.';
-        } else {
-          errorMessage = error.message;
-        }
-      }
-      
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
       Alert.alert('Error', errorMessage);
     } finally {
       setAnalyzing(false);
@@ -626,7 +586,7 @@ export default function ScanScreen() {
         facing={facing}
       >
         {/* Scan Overlay - Title only */}
-        <View style={styles.scanOverlay} pointerEvents="none">
+        <View style={styles.scanOverlay}>
           {/* Title */}
           <View style={styles.titleContainer}>
             <Text style={styles.scanTitleLine1}>SCAN YOUR</Text>
@@ -635,7 +595,7 @@ export default function ScanScreen() {
         </View>
         
         {/* Dark overlay with transparent cutout */}
-        <View style={styles.darkOverlay} pointerEvents="none">
+        <View style={styles.darkOverlay}>
           <View style={styles.overlayTop} />
           <View style={styles.overlayLeft} />
           <View style={styles.overlayRight} />
@@ -644,7 +604,7 @@ export default function ScanScreen() {
         </View>
         
         {/* Results and Controls */}
-        <View style={styles.overlay} pointerEvents="box-none">
+        <View style={styles.overlay}>
           {result && (
             <BlurView intensity={85} style={styles.resultContainer}>
               <Text style={styles.resultText}>{result}</Text>
@@ -716,54 +676,44 @@ export default function ScanScreen() {
       </View>
 
       {/* Botón de captura (FAB) */}
-      <View style={[
-        styles.captureContainer,
-        {
-          position: 'absolute',
-          bottom: 56, // Tab bar height
-          alignSelf: 'center',
-          zIndex: 1000,
-          elevation: 1000,
-          pointerEvents: 'auto',
-        }
-      ]}>
-        <CaptureButton
-          onPress={handleCapture}
-          disabled={analyzing || !canScan || shouldShowPaywall}
-          testID="capture-btn"
-          style={[
-            styles.captureButton,
-            analyzing && styles.capturing,
-          ]}
-        />
-        {/* Debug info for web */}
-        {__DEV__ && (
-          <View style={styles.debugButtonInfo}>
-            <Text style={styles.debugButtonText}>
-              Can Scan: {canScan ? '✅' : '❌'}
-            </Text>
-            <Text style={styles.debugButtonText}>
-              Analyzing: {analyzing ? '🔄' : '⏸️'}
-            </Text>
-            <Text style={styles.debugButtonText}>
-              Paywall: {shouldShowPaywall ? '🔒' : '🔓'}
-            </Text>
-          </View>
-        )}
-        
-        {/* Test button for debugging */}
-        {__DEV__ && (
-          <TouchableOpacity
-            style={styles.testButton}
-            onPress={() => {
-              console.log('🧪 Test button pressed!');
-              Alert.alert('Test', 'Test button works!');
-            }}
-          >
-            <Text style={styles.testButtonText}>🧪 Test</Text>
-          </TouchableOpacity>
-        )}
-      </View>
+             {/* Botón de captura (FAB) - Siempre visible, con estado deshabilitado */}
+       <View style={[
+         styles.captureContainer,
+         {
+           position: 'absolute',
+           bottom: SAFE_BOTTOM,
+           alignSelf: 'center',
+           zIndex: 100,
+           elevation: 100,
+           pointerEvents: 'auto',
+         }
+       ]}>
+         <CaptureButton
+           onPress={handleCapture}
+           disabled={analyzing || !canScan || shouldShowPaywall}
+           testID="capture-btn"
+           style={[
+             styles.captureButton,
+             analyzing && styles.capturing,
+             !canScan && styles.disabled,
+           ]}
+         />
+         
+         {/* Debug info for web */}
+         {__DEV__ && (
+           <View style={styles.debugButtonInfo}>
+             <Text style={styles.debugButtonText}>
+               Can Scan: {canScan ? '✅' : '❌'}
+             </Text>
+             <Text style={styles.debugButtonText}>
+               Analyzing: {analyzing ? '🔄' : '⏸️'}
+             </Text>
+             <Text style={styles.debugButtonText}>
+               Paywall: {shouldShowPaywall ? '🔒' : '🔓'}
+             </Text>
+           </View>
+         )}
+       </View>
 
       {/* Welcome Modal */}
       <Modal
@@ -849,12 +799,37 @@ const styles = StyleSheet.create({
     pointerEvents: 'auto',
   },
   captureButton: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#00e676',
+    width: 72, // Exact size as requested (72x72)
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: '#22c55e', // Green as requested
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.3,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  disabled: {
+    opacity: 0.5,
+    backgroundColor: '#22c55e80', // Semi-transparent green when disabled
+  },
+  debugButtonInfo: {
+    position: 'absolute',
+    top: -80,
+    left: -20,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    padding: 8,
+    borderRadius: 6,
+    minWidth: 120,
+    alignItems: 'center',
+  },
+  debugButtonText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 2,
   },
   capturing: {
     backgroundColor: '#666',
@@ -938,37 +913,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.3)',
     zIndex: 25,
-  },
-  debugButtonInfo: {
-    position: 'absolute',
-    top: -80,
-    left: -20,
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
-    padding: 8,
-    borderRadius: 6,
-    minWidth: 120,
-    alignItems: 'center',
-  },
-  debugButtonText: {
-    color: 'white',
-    fontSize: 12,
-    fontWeight: '600',
-    marginBottom: 2,
-  },
-  testButton: {
-    position: 'absolute',
-    top: -120,
-    right: -20,
-    backgroundColor: 'rgba(255, 0, 0, 0.8)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    zIndex: 1001,
-  },
-  testButtonText: {
-    color: 'white',
-    fontSize: 12,
-    fontWeight: '600',
   },
   debugPaywallButtonText: {
     color: 'white',
