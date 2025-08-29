@@ -3,6 +3,9 @@
   "main": "expo-router/entry",
   "version": "1.0.0",
   "private": true,
+  "engines": {
+    "node": ">=18 <19"
+  },
   "scripts": {
     "dev": "EXPO_NO_TELEMETRY=1 expo start",
     "start": "expo start -c",
@@ -15,7 +18,9 @@
     "ios": "expo run:ios",
     "audit:lighthouse": "node scripts/lighthouse-audit.js",
     "audit:lighthouse:local": "npm run web & timeout 10 && node scripts/lighthouse-audit.js http://localhost:19006",
-    "test:web": "npm run build:web && npm run audit:lighthouse"
+    "test:web": "npm run build:web && npm run audit:lighthouse",
+    "prod:mirror": "npm run build:web && npx serve dist -l 8081",
+    "prod:verify": "node scripts/verify-prod-parity.mjs"
   },
   "dependencies": {
     "@expo-google-fonts/inter": "^0.2.3",

@@ -24,24 +24,26 @@ const isWeb = Platform.OS === 'web';
 
 // Helper function to get environment variables safely
 const getEnvVar = (key: string): string => {
-  // For web environment, use hardcoded values
+  // For web environment, use environment variables
   if (isWeb) {
+    // Check if the environment variable exists
+    if (typeof process !== 'undefined' && process.env?.[key]) {
+      return process.env[key];
+    }
+    
+    // Fallback to hardcoded values for development
     const webConfig: Record<string, string> = {
-      'EXPO_PUBLIC_API_BASE_URL': 'https://formai-backend-dc3u.onrender.com',
+      'EXPO_PUBLIC_API_BASE': 'https://formai-backend-dc3u.onrender.com/api',
       'EXPO_PUBLIC_STRIPE_PRICE_ID_MONTHLY': 'price_1RzeKhI5F6u95FnBU2pmitvR',
       'EXPO_PUBLIC_STRIPE_PRICE_ID_ANNUAL': 'price_1RzeLGI5F6u95FnBCUTKO0ap',
+      'EXPO_PUBLIC_WEB_ORIGIN': 'https://formai-frontend.vercel.app',
       'EXPO_PUBLIC_REVENUECAT_API_KEY': '',
       'OPENAI_API_KEY': ''
     };
     return webConfig[key] || '';
   }
   
-  // For native environment, try Constants.expoConfig.extra
-  if (Constants.expoConfig?.extra?.[key]) {
-    return Constants.expoConfig.extra[key];
-  }
-  
-  // Fallback to process.env
+  // For native environment, fallback to process.env
   if (typeof process !== 'undefined' && process.env?.[key]) {
     return process.env[key];
   }
@@ -68,7 +70,7 @@ const validateEnvVars = () => {
 
 const config: Config = {
   backend: {
-    apiBaseUrl: getEnvVar('EXPO_PUBLIC_API_BASE_URL') || 'https://formai-backend-dc3u.onrender.com',
+    apiBaseUrl: getEnvVar('EXPO_PUBLIC_API_BASE') || 'https://formai-backend-dc3u.onrender.com/api',
   },
   openai: {
     apiKey: getEnvVar('OPENAI_API_KEY') || '',
