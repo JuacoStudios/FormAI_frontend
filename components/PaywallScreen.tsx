@@ -28,8 +28,10 @@ import Animated, {
 } from 'react-native-reanimated';
 import * as WebBrowser from 'expo-web-browser';
 import { createLemonSqueezyCheckout, getProducts, API_BASE, getSubscriptionStatus, assertApiReachable, WEB_ORIGIN } from '../src/lib/api';
-import { goToPayment, USE_PAYMENT_LINKS, getPaymentUrl } from '../src/lib/payments';
+import { goToPayment, USE_PAYMENT_LINKS } from '../src/lib/payments';
 import { getIdentity, setUserEmail } from '../src/lib/identity';
+
+
 
 const { width, height } = Dimensions.get('window');
 
@@ -122,9 +124,9 @@ export default function PaywallScreen({
   const glowAnimation = useSharedValue(0);
 
   // Memoized computed values for Payment Links
-  const monthlyUrl = useMemo(() => getPaymentUrl('monthly'), []);
-  const annualUrl = useMemo(() => getPaymentUrl('annual'), []);
-  const missingLinks = useMemo(() => USE_PAYMENT_LINKS && (!monthlyUrl || !annualUrl), [monthlyUrl, annualUrl]);
+  const monthlyUrl = useMemo(() => 'https://buy.stripe.com/5kQfZh23y9fjb9tb9Z0co01', []);
+  const annualUrl = useMemo(() => 'https://buy.stripe.com/7sY14n37CezDb9tb9Z0co00', []);
+  const missingLinks = useMemo(() => false, []); // Always false since we have hardcoded URLs
 
   // Effect hooks
   useEffect(() => {
@@ -298,7 +300,9 @@ export default function PaywallScreen({
     }
   }, [selectedOption, userEmail, userId, onPurchase]);
 
-  // STRIPE: Handle Stripe subscription with Payment Links
+
+
+  // STRIPE: Handle Stripe subscription with direct navigation
   const handleStripeSubscribe = useCallback(async (plan: 'monthly' | 'annual') => {
     if (stripeLoading) return;
     
@@ -313,18 +317,9 @@ export default function PaywallScreen({
       // Persist user email
       await setUserEmail(userEmail);
       
-      // Use Payment Links when enabled
-      if (USE_PAYMENT_LINKS) {
-        const ok = goToPayment(plan);
-        if (!ok) {
-          Alert.alert('Error', 'Payment link is not configured. Please try again later.');
-        }
-        return;
-      }
-      
-      // Legacy path disabled for now
-      console.warn('[checkout] Legacy checkout disabled, using Payment Links');
-      goToPayment(plan);
+      // Direct navigation to Stripe Checkout
+      const url = plan === 'monthly' ? monthlyUrl : annualUrl;
+      window.location.assign(url);
       
     } catch (err) {
       console.error('[checkout] start failed:', err);
@@ -332,7 +327,7 @@ export default function PaywallScreen({
     } finally {
       setStripeLoading(false);
     }
-  }, [userEmail, stripeLoading]);
+  }, [userEmail, stripeLoading, monthlyUrl, annualUrl]);
 
   const handleRestore = useCallback(async () => {
     try {
@@ -489,25 +484,18 @@ export default function PaywallScreen({
                 />
               </View>
 
-              {/* Payment Links Status */}
-              {missingLinks && (
-                <View style={styles.statusContainer}>
-                  <Text style={styles.statusText}>Temporarily unavailable</Text>
-                </View>
-              )}
-
               <View style={styles.buttonContainer}>
                 <TouchableOpacity
                   style={[styles.button, styles.stripeButton]}
                   onPress={() => handleStripeSubscribe('monthly')}
-                  disabled={!canSubscribe || stripeLoading || missingLinks}
+                  disabled={!canSubscribe || stripeLoading}
                   activeOpacity={0.8}
                 >
                   {stripeLoading ? (
                     <>
                       <ActivityIndicator color="#ffffff" />
                       <Text style={[styles.buttonText, { marginLeft: 8 }]}>
-                        {USE_PAYMENT_LINKS ? 'Redirecting…' : 'Opening…'}
+                        Redirecting…
                       </Text>
                     </>
                   ) : (
@@ -521,14 +509,14 @@ export default function PaywallScreen({
                 <TouchableOpacity
                   style={[styles.button, styles.stripeButton]}
                   onPress={() => handleStripeSubscribe('annual')}
-                  disabled={!canSubscribe || stripeLoading || missingLinks}
+                  disabled={!canSubscribe || stripeLoading}
                   activeOpacity={0.8}
                 >
                   {stripeLoading ? (
                     <>
                       <ActivityIndicator color="#ffffff" />
                       <Text style={[styles.buttonText, { marginLeft: 8 }]}>
-                        {USE_PAYMENT_LINKS ? 'Redirecting…' : 'Opening…'}
+                        Redirecting…
                       </Text>
                     </>
                   ) : (

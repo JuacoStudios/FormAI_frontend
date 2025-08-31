@@ -4,6 +4,7 @@ export const USE_PAYMENT_LINKS =
 
 function getPaymentUrl(plan: 'monthly' | 'annual'): string | null {
   const monthly = process.env.NEXT_PUBLIC_STRIPE_LINK_MONTHLY;
+  
   const annual = process.env.NEXT_PUBLIC_STRIPE_LINK_ANNUAL;
   return plan === 'annual' ? annual ?? null : monthly ?? null;
 }
