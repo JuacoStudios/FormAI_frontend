@@ -126,7 +126,7 @@ export default function PaywallScreen({
 
   // Memoized computed values for Payment Links
   const monthlyUrl = useMemo(() => 'https://buy.stripe.com/5kQfZh23y9fjb9tb9Z0co01', []);
-  const annualUrl = useMemo(() => 'https://buy.stripe.com/7sY14n37CezDb9tb9Z0co00', []);
+  const annualUrl = useMemo(() => 'https://buy.stripe.com/5kQfZh23y9fjb9tb9Z0co01', []);
   const missingLinks = useMemo(() => false, []); // Always false since we have hardcoded URLs
 
   // Effect hooks
