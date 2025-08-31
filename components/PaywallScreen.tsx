@@ -123,6 +123,7 @@ export default function PaywallScreen({
   const pulseAnimation = useSharedValue(1);
   const glowAnimation = useSharedValue(0);
 
+
   // Memoized computed values for Payment Links
   const monthlyUrl = useMemo(() => 'https://buy.stripe.com/5kQfZh23y9fjb9tb9Z0co01', []);
   const annualUrl = useMemo(() => 'https://buy.stripe.com/7sY14n37CezDb9tb9Z0co00', []);
