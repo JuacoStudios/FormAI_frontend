@@ -28,11 +28,8 @@ import Animated, {
 } from 'react-native-reanimated';
 import * as WebBrowser from 'expo-web-browser';
 import { createLemonSqueezyCheckout, getProducts, API_BASE, getSubscriptionStatus, assertApiReachable, WEB_ORIGIN } from '../src/lib/api';
-import { goToPayment, USE_PAYMENT_LINKS } from '../src/lib/payments';
+import { goToPayment, USE_PAYMENT_LINKS, getPaymentUrl } from '../src/lib/payments';
 import { getIdentity, setUserEmail } from '../src/lib/identity';
-
-// TEMPORARY: Force Payment Links to eliminate legacy /api/checkout calls
-const ALWAYS_PAYMENT_LINKS = true;
 
 const { width, height } = Dimensions.get('window');
 
@@ -124,6 +121,11 @@ export default function PaywallScreen({
   const pulseAnimation = useSharedValue(1);
   const glowAnimation = useSharedValue(0);
 
+  // Memoized computed values for Payment Links
+  const monthlyUrl = useMemo(() => getPaymentUrl('monthly'), []);
+  const annualUrl = useMemo(() => getPaymentUrl('annual'), []);
+  const missingLinks = useMemo(() => USE_PAYMENT_LINKS && (!monthlyUrl || !annualUrl), [monthlyUrl, annualUrl]);
+
   // Effect hooks
   useEffect(() => {
     if (visible) {
@@ -152,7 +154,7 @@ export default function PaywallScreen({
         console.debug('[Paywall] Identity initialized:', identity);
         
         // Check subscription status (disabled when using Payment Links)
-        if (identity.userId && !ALWAYS_PAYMENT_LINKS && !USE_PAYMENT_LINKS) {
+        if (identity.userId && !USE_PAYMENT_LINKS) {
           try {
             const status = await getSubscriptionStatus(identity.userId);
             console.debug('[Paywall] Subscription status:', status);
@@ -296,7 +298,7 @@ export default function PaywallScreen({
     }
   }, [selectedOption, userEmail, userId, onPurchase]);
 
-  // STRIPE: Handle Stripe subscription with Payment Links (legacy disabled)
+  // STRIPE: Handle Stripe subscription with Payment Links
   const handleStripeSubscribe = useCallback(async (plan: 'monthly' | 'annual') => {
     if (stripeLoading) return;
     
@@ -311,9 +313,12 @@ export default function PaywallScreen({
       // Persist user email
       await setUserEmail(userEmail);
       
-      // TEMPORARY: Always use Payment Links, legacy disabled
-      if (ALWAYS_PAYMENT_LINKS || USE_PAYMENT_LINKS) {
-        goToPayment(plan);
+      // Use Payment Links when enabled
+      if (USE_PAYMENT_LINKS) {
+        const ok = goToPayment(plan);
+        if (!ok) {
+          Alert.alert('Error', 'Payment link is not configured. Please try again later.');
+        }
         return;
       }
       
@@ -470,8 +475,6 @@ export default function PaywallScreen({
               </View>
 
               {/* Email Input */}
-
-              {/* Email Input */}
               <View style={styles.emailSection}>
                 <Text style={styles.emailLabel}>Email for subscription:</Text>
                 <TextInput
@@ -486,21 +489,18 @@ export default function PaywallScreen({
                 />
               </View>
 
-              {/* Debug UI - TEMPORARY */}
-              <View style={styles.debugContainer}>
-                <Text style={styles.debugText}>
-                  USE_PAYMENT_LINKS: {USE_PAYMENT_LINKS ? 'true' : 'false'}
-                </Text>
-                <Text style={styles.debugText}>
-                  Payment Links forced: {ALWAYS_PAYMENT_LINKS ? 'YES' : 'NO'}
-                </Text>
-              </View>
+              {/* Payment Links Status */}
+              {missingLinks && (
+                <View style={styles.statusContainer}>
+                  <Text style={styles.statusText}>Temporarily unavailable</Text>
+                </View>
+              )}
 
               <View style={styles.buttonContainer}>
                 <TouchableOpacity
                   style={[styles.button, styles.stripeButton]}
                   onPress={() => handleStripeSubscribe('monthly')}
-                  disabled={!canSubscribe || stripeLoading}
+                  disabled={!canSubscribe || stripeLoading || missingLinks}
                   activeOpacity={0.8}
                 >
                   {stripeLoading ? (
@@ -521,12 +521,11 @@ export default function PaywallScreen({
                 <TouchableOpacity
                   style={[styles.button, styles.stripeButton]}
                   onPress={() => handleStripeSubscribe('annual')}
-                  disabled={!canSubscribe || stripeLoading}
+                  disabled={!canSubscribe || stripeLoading || missingLinks}
                   activeOpacity={0.8}
                 >
                   {stripeLoading ? (
-
-<>
+                    <>
                       <ActivityIndicator color="#ffffff" />
                       <Text style={[styles.buttonText, { marginLeft: 8 }]}>
                         {USE_PAYMENT_LINKS ? 'Redirecting…' : 'Opening…'}
@@ -550,9 +549,12 @@ export default function PaywallScreen({
               <TouchableOpacity
                 style={[styles.purchaseButton, purchasing && styles.purchaseButtonDisabled]}
                 onPress={() => {
-                  // TEMPORARY: Force Payment Links for all purchase buttons
-                  if (ALWAYS_PAYMENT_LINKS || USE_PAYMENT_LINKS) {
-                    goToPayment('monthly'); // Default to monthly
+                  // Use Payment Links when enabled
+                  if (USE_PAYMENT_LINKS) {
+                    const ok = goToPayment('monthly'); // Default to monthly
+                    if (!ok) {
+                      Alert.alert('Error', 'Payment link is not configured. Please try again later.');
+                    }
                     return;
                   }
                   handlePurchase();
@@ -981,20 +983,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#888888',
     marginHorizontal: 8,
   },
-  debugContainer: {
-    backgroundColor: 'rgba(255, 193, 7, 0.1)',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 193, 7, 0.3)',
-  },
-  debugText: {
-    fontSize: 12,
-    color: '#FFC107',
-    textAlign: 'center',
-    marginBottom: 2,
-    fontFamily: 'monospace',
-  },
+
 
 });

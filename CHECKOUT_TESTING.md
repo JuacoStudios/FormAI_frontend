@@ -86,3 +86,4 @@ Frontend logs will show:
 - No popup blockers - direct navigation preserves user gesture
 - Mobile-friendly with responsive design
 - Minimal console logging in production
+

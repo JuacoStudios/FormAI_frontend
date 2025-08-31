@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { TouchableOpacity, Text, ActivityIndicator, StyleSheet, View } from 'react-native';
+import { TouchableOpacity, Text, ActivityIndicator, StyleSheet, View, Alert } from 'react-native';
 import { createCheckoutSession } from '../src/lib/api';
+import { USE_PAYMENT_LINKS, goToPayment, getPaymentUrl } from '../src/lib/payments';
 
 interface PayButtonProps {
   plan?: 'monthly' | 'annual';
@@ -23,6 +24,15 @@ export function PayButton({
 
   const onPay = async () => {
     if (loading || disabled) return;
+    
+    // Use Payment Links when enabled
+    if (USE_PAYMENT_LINKS) {
+      const ok = goToPayment(plan);
+      if (!ok) {
+        Alert.alert('Error', 'Payment link is not configured. Please try again later.');
+      }
+      return;
+    }
     
     setLoading(true);
     try {
@@ -160,3 +170,4 @@ const styles = StyleSheet.create({
 });
 
 export default PayButton;
+

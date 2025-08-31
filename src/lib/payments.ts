@@ -2,30 +2,20 @@
 export const USE_PAYMENT_LINKS =
   (process.env.NEXT_PUBLIC_USE_PAYMENT_LINKS ?? 'true') === 'true';
 
-export function goToPayment(plan: 'monthly' | 'annual') {
-  // Try environment variables first
-  let monthly = process.env.NEXT_PUBLIC_STRIPE_LINK_MONTHLY;
-  let annual = process.env.NEXT_PUBLIC_STRIPE_LINK_ANNUAL;
-  
-  // TEMPORARY hardcoded fallback if env vars are missing
-  if (!monthly || !annual) {
-    console.warn('[payments] Using hardcoded fallback Payment Links');
-    monthly = 'https://buy.stripe.com/test_monthly_fallback';
-    annual = 'https://buy.stripe.com/test_annual_fallback';
-  }
-  
-  const url = plan === 'annual' ? annual : monthly;
-
-  if (!url) {
-    alert('Payment link is not configured. Please contact support.');
-    return;
-  }
-
-  console.log(`[payments] Redirecting to ${plan} plan:`, url);
-  
-  // Direct navigation preserves the user gesture on mobile (no popup blockers)
-  window.location.assign(url);
+function getPaymentUrl(plan: 'monthly' | 'annual'): string | null {
+  const monthly = process.env.NEXT_PUBLIC_STRIPE_LINK_MONTHLY;
+  const annual = process.env.NEXT_PUBLIC_STRIPE_LINK_ANNUAL;
+  return plan === 'annual' ? annual ?? null : monthly ?? null;
 }
+
+export function goToPayment(plan: 'monthly' | 'annual'): boolean {
+  const url = getPaymentUrl(plan);
+  if (!url) return false; // caller will show a friendly message / disable buttons
+  window.location.assign(url);
+  return true;
+}
+
+export { getPaymentUrl };
 
 // Feature flag check for subscription status
 export function shouldSkipSubscriptionCheck(): boolean {

@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
 import { API_BASE } from '../lib/api';
+import { USE_PAYMENT_LINKS } from '../lib/payments';
 
 export type Plan = 'monthly' | 'annual' | null;
 
@@ -36,6 +37,15 @@ export const SubscriptionProvider: React.FC<SubscriptionProviderProps> = ({ chil
   const fetchStatus = useCallback(async (email: string) => {
     if (!email) {
       setError('Email is required');
+      return;
+    }
+
+    // Skip API call when Payment Links are enabled
+    if (USE_PAYMENT_LINKS) {
+      console.log('🔍 Payment Links enabled, skipping subscription status check');
+      setIsPremium(false);
+      setPlan(null);
+      setLoading(false);
       return;
     }
 

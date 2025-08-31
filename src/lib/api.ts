@@ -1,6 +1,8 @@
 // Centralized API configuration with fallback warning
 let warned = false;
 
+import { USE_PAYMENT_LINKS } from './payments';
+
 export const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/+$/, '') ||
   (() => {
@@ -38,6 +40,10 @@ export async function assertApiReachable() {
 
 // New simplified checkout function for Stripe
 export async function createCheckoutSession(payload = {}) {
+  if (USE_PAYMENT_LINKS) {
+    throw new Error('Legacy checkout disabled when Payment Links are enabled');
+  }
+  
   const res = await fetch(`${API_BASE}/api/checkout`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
@@ -50,6 +56,14 @@ export async function createCheckoutSession(payload = {}) {
 
 
 export async function getProducts() {
+  if (USE_PAYMENT_LINKS) {
+    // Return empty structure when Payment Links are enabled
+    return {
+      monthly: null,
+      annual: null
+    };
+  }
+  
   try {
     const r = await fetch(apiUrl('/api/stripe/products'));
     if (!r.ok) {
@@ -76,6 +90,10 @@ export async function getProducts() {
 }
 
 export async function createCheckout(plan: 'monthly' | 'annual') {
+  if (USE_PAYMENT_LINKS) {
+    throw new Error('Legacy checkout disabled when Payment Links are enabled');
+  }
+  
   const res = await fetch(`${API_BASE}/api/checkout`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
@@ -133,6 +151,11 @@ export async function getSubscriptionStatus(userId: string): Promise<{
   plan?: "monthly"|"annual"; 
   currentPeriodEnd?: number 
 }> {
+  if (USE_PAYMENT_LINKS) {
+    // Return default status when Payment Links are enabled
+    return { active: false };
+  }
+  
   const r = await fetch(apiUrl(`/api/subscription/status?userId=${encodeURIComponent(userId)}`));
   if (!r.ok) throw new Error(`HTTP ${r.status}: ${r.statusText}`);
   return await r.json();
@@ -140,6 +163,10 @@ export async function getSubscriptionStatus(userId: string): Promise<{
 
 // STRIPE: Get Stripe price configuration status
 export async function getStripePrices() {
+  if (USE_PAYMENT_LINKS) {
+    throw new Error('Stripe prices endpoint disabled when Payment Links are enabled');
+  }
+  
   const r = await fetch(apiUrl('/api/stripe/prices'));
   if (!r.ok) throw new Error("Failed to fetch Stripe prices");
   return await r.json();
