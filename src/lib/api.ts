@@ -1,8 +1,8 @@
 // Environment variables and constants
-export const API_BASE = process.env.EXPO_PUBLIC_API_BASE!;
-export const ENV_MONTHLY = process.env.EXPO_PUBLIC_STRIPE_PRICE_ID_MONTHLY || "";
-export const ENV_ANNUAL = process.env.EXPO_PUBLIC_STRIPE_PRICE_ID_ANNUAL || "";
-export const WEB_ORIGIN = process.env.EXPO_PUBLIC_WEB_ORIGIN || (typeof window !== "undefined" ? window.location.origin : "");
+export const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.EXPO_PUBLIC_API_BASE_URL || 'https://formai-backend-dc3u.onrender.com';
+export const ENV_MONTHLY = process.env.NEXT_PUBLIC_STRIPE_PRICE_ID_MONTHLY || process.env.EXPO_PUBLIC_STRIPE_PRICE_ID_MONTHLY || "";
+export const ENV_ANNUAL = process.env.NEXT_PUBLIC_STRIPE_PRICE_ID_ANNUAL || process.env.EXPO_PUBLIC_STRIPE_PRICE_ID_ANNUAL || "";
+export const WEB_ORIGIN = process.env.NEXT_PUBLIC_WEB_ORIGIN || process.env.EXPO_PUBLIC_WEB_ORIGIN || (typeof window !== "undefined" ? window.location.origin : "");
 
 // Helper function to build full URLs
 function url(path: string) {
@@ -22,6 +22,17 @@ export async function assertApiReachable() {
     console.error('[Paywall] API not reachable:', e);
     return false;
   }
+}
+
+// New simplified checkout function for Stripe
+export async function createCheckoutSession(payload = {}) {
+  const res = await fetch(`${API_BASE}/api/checkout`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(`Checkout failed: ${res.status}`);
+  return res.json() as Promise<{ id?: string; url?: string }>;
 }
 
 export async function getProducts() {
