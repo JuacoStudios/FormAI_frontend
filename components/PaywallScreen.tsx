@@ -27,9 +27,12 @@ import Animated, {
   ZoomIn,
 } from 'react-native-reanimated';
 import * as WebBrowser from 'expo-web-browser';
-import { createCheckout, createLemonSqueezyCheckout, getProducts, API_BASE, getSubscriptionStatus, assertApiReachable, WEB_ORIGIN } from '../src/lib/api';
+import { createLemonSqueezyCheckout, getProducts, API_BASE, getSubscriptionStatus, assertApiReachable, WEB_ORIGIN } from '../src/lib/api';
 import { goToPayment, USE_PAYMENT_LINKS } from '../src/lib/payments';
 import { getIdentity, setUserEmail } from '../src/lib/identity';
+
+// TEMPORARY: Force Payment Links to eliminate legacy /api/checkout calls
+const ALWAYS_PAYMENT_LINKS = true;
 
 const { width, height } = Dimensions.get('window');
 
@@ -148,8 +151,8 @@ export default function PaywallScreen({
         }
         console.debug('[Paywall] Identity initialized:', identity);
         
-        // Check subscription status (skip if using Payment Links)
-        if (identity.userId && !USE_PAYMENT_LINKS) {
+        // Check subscription status (disabled when using Payment Links)
+        if (identity.userId && !ALWAYS_PAYMENT_LINKS && !USE_PAYMENT_LINKS) {
           try {
             const status = await getSubscriptionStatus(identity.userId);
             console.debug('[Paywall] Subscription status:', status);
@@ -293,7 +296,7 @@ export default function PaywallScreen({
     }
   }, [selectedOption, userEmail, userId, onPurchase]);
 
-  // STRIPE: Handle Stripe subscription with Payment Links or legacy checkout
+  // STRIPE: Handle Stripe subscription with Payment Links (legacy disabled)
   const handleStripeSubscribe = useCallback(async (plan: 'monthly' | 'annual') => {
     if (stripeLoading) return;
     
@@ -308,27 +311,16 @@ export default function PaywallScreen({
       // Persist user email
       await setUserEmail(userEmail);
       
-      if (USE_PAYMENT_LINKS) {
-        // Use Stripe Payment Links (immediate redirect)
+      // TEMPORARY: Always use Payment Links, legacy disabled
+      if (ALWAYS_PAYMENT_LINKS || USE_PAYMENT_LINKS) {
         goToPayment(plan);
         return;
       }
       
-      // Legacy flow kept for future use
-      const { url } = await createCheckout(plan);
+      // Legacy path disabled for now
+      console.warn('[checkout] Legacy checkout disabled, using Payment Links');
+      goToPayment(plan);
       
-      if (!url) {
-        throw new Error('No checkout url from backend');
-      }
-      
-      // ✅ Mobile-safe: direct navigation preserves user gesture
-      if (typeof window !== 'undefined') {
-        window.location.assign(url);
-      } else {
-        // Fallback for React Native
-        console.log('Checkout URL:', url);
-        Alert.alert('Success', 'Checkout URL generated. Please open in browser.');
-      }
     } catch (err) {
       console.error('[checkout] start failed:', err);
       Alert.alert('Error', 'We could not start your checkout. Please try again.');
@@ -494,6 +486,16 @@ export default function PaywallScreen({
                 />
               </View>
 
+              {/* Debug UI - TEMPORARY */}
+              <View style={styles.debugContainer}>
+                <Text style={styles.debugText}>
+                  USE_PAYMENT_LINKS: {USE_PAYMENT_LINKS ? 'true' : 'false'}
+                </Text>
+                <Text style={styles.debugText}>
+                  Payment Links forced: {ALWAYS_PAYMENT_LINKS ? 'YES' : 'NO'}
+                </Text>
+              </View>
+
               <View style={styles.buttonContainer}>
                 <TouchableOpacity
                   style={[styles.button, styles.stripeButton]}
@@ -547,7 +549,14 @@ export default function PaywallScreen({
             >
               <TouchableOpacity
                 style={[styles.purchaseButton, purchasing && styles.purchaseButtonDisabled]}
-                onPress={handlePurchase}
+                onPress={() => {
+                  // TEMPORARY: Force Payment Links for all purchase buttons
+                  if (ALWAYS_PAYMENT_LINKS || USE_PAYMENT_LINKS) {
+                    goToPayment('monthly'); // Default to monthly
+                    return;
+                  }
+                  handlePurchase();
+                }}
                 disabled={purchasing || loading}
                 activeOpacity={0.9}
               >
@@ -971,6 +980,21 @@ const styles = StyleSheet.create({
     borderRadius: 2,
     backgroundColor: '#888888',
     marginHorizontal: 8,
+  },
+  debugContainer: {
+    backgroundColor: 'rgba(255, 193, 7, 0.1)',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 193, 7, 0.3)',
+  },
+  debugText: {
+    fontSize: 12,
+    color: '#FFC107',
+    textAlign: 'center',
+    marginBottom: 2,
+    fontFamily: 'monospace',
   },
 
 });
