@@ -27,7 +27,8 @@ import Animated, {
   ZoomIn,
 } from 'react-native-reanimated';
 import * as WebBrowser from 'expo-web-browser';
-import { createCheckout, createLemonSqueezyCheckout, getProducts, API_BASE, getSubscriptionStatus, assertApiReachable, ENV_MONTHLY, ENV_ANNUAL, WEB_ORIGIN } from '../src/lib/api';
+import { createCheckout, createLemonSqueezyCheckout, getProducts, API_BASE, getSubscriptionStatus, assertApiReachable, WEB_ORIGIN } from '../src/lib/api';
+import { goToPayment, USE_PAYMENT_LINKS } from '../src/lib/payments';
 import { getIdentity, setUserEmail } from '../src/lib/identity';
 
 const { width, height } = Dimensions.get('window');
@@ -147,8 +148,8 @@ export default function PaywallScreen({
         }
         console.debug('[Paywall] Identity initialized:', identity);
         
-        // Check subscription status
-        if (identity.userId) {
+        // Check subscription status (skip if using Payment Links)
+        if (identity.userId && !USE_PAYMENT_LINKS) {
           try {
             const status = await getSubscriptionStatus(identity.userId);
             console.debug('[Paywall] Subscription status:', status);
@@ -213,11 +214,11 @@ export default function PaywallScreen({
       setProducts([]);
       setUsingFallback(true);
       
-      // Fallback to environment variables
-      setMonthlyId(ENV_MONTHLY || '');
-      setAnnualId(ENV_ANNUAL || '');
+      // Fallback to environment variables - not needed with Payment Links
+      setMonthlyId('');
+      setAnnualId('');
       
-      console.debug('[Paywall] Fallback to env prices after error:', { monthly: ENV_MONTHLY, annual: ENV_ANNUAL });
+      console.debug('[Paywall] Fallback to env prices after error:', { monthly: '', annual: '' });
     } finally {
       setProductsLoading(false);
     }
@@ -292,7 +293,7 @@ export default function PaywallScreen({
     }
   }, [selectedOption, userEmail, userId, onPurchase]);
 
-  // STRIPE: Handle Stripe subscription with direct navigation
+  // STRIPE: Handle Stripe subscription with Payment Links or legacy checkout
   const handleStripeSubscribe = useCallback(async (plan: 'monthly' | 'annual') => {
     if (stripeLoading) return;
     
@@ -307,7 +308,13 @@ export default function PaywallScreen({
       // Persist user email
       await setUserEmail(userEmail);
       
-      // Call the simplified checkout endpoint
+      if (USE_PAYMENT_LINKS) {
+        // Use Stripe Payment Links (immediate redirect)
+        goToPayment(plan);
+        return;
+      }
+      
+      // Legacy flow kept for future use
       const { url } = await createCheckout(plan);
       
       if (!url) {
@@ -497,7 +504,9 @@ export default function PaywallScreen({
                   {stripeLoading ? (
                     <>
                       <ActivityIndicator color="#ffffff" />
-                      <Text style={[styles.buttonText, { marginLeft: 8 }]}>Opening…</Text>
+                      <Text style={[styles.buttonText, { marginLeft: 8 }]}>
+                        {USE_PAYMENT_LINKS ? 'Redirecting…' : 'Opening…'}
+                      </Text>
                     </>
                   ) : (
                     <>
@@ -517,7 +526,9 @@ export default function PaywallScreen({
 
 <>
                       <ActivityIndicator color="#ffffff" />
-                      <Text style={[styles.buttonText, { marginLeft: 8 }]}>Opening…</Text>
+                      <Text style={[styles.buttonText, { marginLeft: 8 }]}>
+                        {USE_PAYMENT_LINKS ? 'Redirecting…' : 'Opening…'}
+                      </Text>
                     </>
                   ) : (
                     <>
