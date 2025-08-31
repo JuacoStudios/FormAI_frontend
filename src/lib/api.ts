@@ -35,6 +35,8 @@ export async function createCheckoutSession(payload = {}) {
   return res.json() as Promise<{ id?: string; url?: string }>;
 }
 
+
+
 export async function getProducts() {
   try {
     const r = await fetch(url('/api/stripe/products'));
@@ -61,46 +63,55 @@ export async function getProducts() {
   }
 }
 
-export async function createCheckout(payload: {
+export async function createCheckout(plan: 'monthly' | 'annual') {
+  const res = await fetch(`${API_BASE}/api/checkout`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+    body: JSON.stringify({ plan }),
+  });
+  if (!res.ok) throw new Error(`Checkout failed: ${res.status}`);
+  return res.json() as Promise<{ url?: string; id?: string }>;
+}
+
+// Legacy function for Lemon Squeezy (keeping for backward compatibility)
+export async function createLemonSqueezyCheckout(payload: {
   priceId: string;
   customerEmail: string;
   userId: string;
   successUrl: string;
   cancelUrl: string;
 }): Promise<{ url: string }> {
-  console.debug('[Stripe] createCheckout request:', payload);
+  console.debug('[LemonSqueezy] createCheckout request:', payload);
   
   try {
-    const r = await fetch(url('/api/create-checkout-session'), {
+    const r = await fetch(url('/api/create-checkout'), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        priceId: payload.priceId,
+        variantId: payload.priceId,
         customerEmail: payload.customerEmail,
-        userId: payload.userId,
-        successUrl: payload.successUrl,
-        cancelUrl: payload.cancelUrl
+        redirectUrl: payload.successUrl
       })
     });
     
-    console.debug('[Stripe] createCheckout response status:', r.status);
+    console.debug('[LemonSqueezy] createCheckout response status:', r.status);
     
     if (!r.ok) {
       const errorBody = await r.text();
-      console.error('[Stripe] createCheckout error response:', errorBody);
+      console.error('[LemonSqueezy] createCheckout error response:', errorBody);
       throw new Error(`HTTP ${r.status}: ${errorBody}`);
     }
     
     const j = await r.json();
-    console.debug('[Stripe] createCheckout success response:', j);
+    console.debug('[LemonSqueezy] createCheckout success response:', j);
     
-    if (!j?.url) {
+    if (!j?.checkoutUrl) {
       throw new Error("No checkout URL returned from backend");
     }
     
-    return { url: j.url };
+    return { url: j.checkoutUrl };
   } catch (err: any) {
-    console.error('[Stripe] createCheckout error:', err);
+    console.error('[LemonSqueezy] createCheckout error:', err);
     throw new Error(err.message || "Failed to create checkout session");
   }
 }

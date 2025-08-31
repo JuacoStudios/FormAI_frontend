@@ -27,7 +27,7 @@ import Animated, {
   ZoomIn,
 } from 'react-native-reanimated';
 import * as WebBrowser from 'expo-web-browser';
-import { createCheckout, getProducts, API_BASE, getSubscriptionStatus, assertApiReachable, ENV_MONTHLY, ENV_ANNUAL, WEB_ORIGIN } from '../src/lib/api';
+import { createCheckout, createLemonSqueezyCheckout, getProducts, API_BASE, getSubscriptionStatus, assertApiReachable, ENV_MONTHLY, ENV_ANNUAL, WEB_ORIGIN } from '../src/lib/api';
 import { getIdentity, setUserEmail } from '../src/lib/identity';
 
 const { width, height } = Dimensions.get('window');
@@ -223,23 +223,17 @@ export default function PaywallScreen({
     }
   };
 
-  // Compute subscription availability
+  // Compute subscription availability - always allow checkout
   useEffect(() => {
-    const hasPrices = Boolean(monthlyId && annualId);
     const hasEmail = userEmail.trim().length > 0;
-    const canSub = hasPrices && hasEmail;
-    
-    setCanSubscribe(Boolean(canSub));
+    setCanSubscribe(hasEmail);
     
     console.debug('[Paywall] Subscription availability computed:', {
-      hasPrices,
       hasEmail,
-      canSubscribe: canSub,
-      monthlyId: !!monthlyId,
-      annualId: !!annualId,
+      canSubscribe: hasEmail,
       userEmail: userEmail.trim().length
     });
-  }, [monthlyId, annualId, userEmail]);
+  }, [userEmail]);
 
   // Animation style hooks
   const animatedPulseStyle = useAnimatedStyle(() => {
@@ -267,7 +261,7 @@ export default function PaywallScreen({
       console.log(`🛒 Iniciando compra para: ${selectedPlan.title} (${selectedPlan.variantId})`);
       
       // Create checkout with Lemon Squeezy
-      const checkoutResult = await createCheckout({ 
+      const checkoutResult = await createLemonSqueezyCheckout({ 
         priceId: selectedPlan.variantId,
         customerEmail: userEmail,
         userId: userId,
@@ -298,20 +292,12 @@ export default function PaywallScreen({
     }
   }, [selectedOption, userEmail, userId, onPurchase]);
 
-  // STRIPE: Handle Stripe subscription
+  // STRIPE: Handle Stripe subscription with direct navigation
   const handleStripeSubscribe = useCallback(async (plan: 'monthly' | 'annual') => {
-    console.debug(`[Stripe] Subscribe ${plan} pressed`);
+    if (stripeLoading) return;
     
     if (!userEmail.trim()) {
       Alert.alert('Error', 'Please enter your email address');
-      return;
-    }
-    
-    const priceId = plan === 'monthly' ? monthlyId : annualId;
-    
-    if (!priceId) {
-      console.warn('[Stripe] missing priceId for', plan);
-      Alert.alert('Error', 'No Stripe priceId available. Check configuration.');
       return;
     }
     
@@ -320,49 +306,29 @@ export default function PaywallScreen({
       
       // Persist user email
       await setUserEmail(userEmail);
-      console.debug('[Stripe] User email persisted:', userEmail);
       
-      // Use web URLs derived from WEB_ORIGIN
-      const successUrl = `${WEB_ORIGIN}/purchase/success`;
-      const cancelUrl = `${WEB_ORIGIN}/purchase/cancel`;
+      // Call the simplified checkout endpoint
+      const { url } = await createCheckout(plan);
       
-      const payload = { 
-        priceId, 
-        customerEmail: userEmail, 
-        userId: userId, 
-        successUrl, 
-        cancelUrl 
-      };
-      
-      console.debug('[Paywall] WEB_ORIGIN:', WEB_ORIGIN);
-      console.debug('[Stripe] createCheckout payload:', payload);
-      
-      const res = await createCheckout(payload);
-      
-      console.debug('[Stripe] checkout response:', res);
-      
-      if (!res.url) {
-        Alert.alert('Error', 'Backend did not return a checkout URL');
-        return;
+      if (!url) {
+        throw new Error('No checkout url from backend');
       }
       
-      console.debug('[Stripe] success url:', res.url);
-      
-      // Open checkout with WebBrowser
-      try {
-        const result = await WebBrowser.openBrowserAsync(res.url);
-        console.debug('[Stripe] WebBrowser result:', result);
-      } catch (e) {
-        console.error('[Stripe] WebBrowser error:', e);
-        Alert.alert('Error', 'Could not open checkout in browser');
+      // ✅ Mobile-safe: direct navigation preserves user gesture
+      if (typeof window !== 'undefined') {
+        window.location.assign(url);
+      } else {
+        // Fallback for React Native
+        console.log('Checkout URL:', url);
+        Alert.alert('Success', 'Checkout URL generated. Please open in browser.');
       }
     } catch (err) {
-      console.error('[Stripe] subscribe error:', err);
-      Alert.alert('Error', 'Error creating Stripe checkout session. Check console for details.');
+      console.error('[checkout] start failed:', err);
+      Alert.alert('Error', 'We could not start your checkout. Please try again.');
     } finally {
       setStripeLoading(false);
     }
-  }, [monthlyId, annualId, userEmail, userId, WEB_ORIGIN]);
+  }, [userEmail, stripeLoading]);
 
   const handleRestore = useCallback(async () => {
     try {
@@ -526,13 +492,17 @@ export default function PaywallScreen({
                   style={[styles.button, styles.stripeButton]}
                   onPress={() => handleStripeSubscribe('monthly')}
                   disabled={!canSubscribe || stripeLoading}
+                  activeOpacity={0.8}
                 >
                   {stripeLoading ? (
-                    <ActivityIndicator color="#ffffff" />
+                    <>
+                      <ActivityIndicator color="#ffffff" />
+                      <Text style={[styles.buttonText, { marginLeft: 8 }]}>Opening…</Text>
+                    </>
                   ) : (
                     <>
                       <CreditCard size={20} color="#ffffff" />
-                      <Text style={styles.buttonText}>Subscribe Monthly (Stripe)</Text>
+                      <Text style={styles.buttonText}>Subscribe Monthly</Text>
                     </>
                   )}
                 </TouchableOpacity>
@@ -541,13 +511,18 @@ export default function PaywallScreen({
                   style={[styles.button, styles.stripeButton]}
                   onPress={() => handleStripeSubscribe('annual')}
                   disabled={!canSubscribe || stripeLoading}
+                  activeOpacity={0.8}
                 >
                   {stripeLoading ? (
-                    <ActivityIndicator color="#ffffff" />
+
+<>
+                      <ActivityIndicator color="#ffffff" />
+                      <Text style={[styles.buttonText, { marginLeft: 8 }]}>Opening…</Text>
+                    </>
                   ) : (
                     <>
                       <CreditCard size={20} color="#ffffff" />
-                      <Text style={styles.buttonText}>Subscribe Annual (Stripe)</Text>
+                      <Text style={styles.buttonText}>Subscribe Annual</Text>
                     </>
                   )}
                 </TouchableOpacity>
