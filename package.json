@@ -9,7 +9,7 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "build": "npx expo export --platform web --output-dir dist --clear",
-    "build:web": "npx expo export --platform web --output-dir dist --clear && node scripts/write-build-info.mjs",
+    "build:web": "expo export --platform web --output-dir dist --clear && node scripts/write-build-info.mjs",
     "dev": "EXPO_NO_TELEMETRY=1 expo start",
     "start:web": "expo start --web",
     "preview:web": "npx serve dist -p 5173",
