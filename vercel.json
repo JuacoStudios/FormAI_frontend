@@ -1,4 +1,7 @@
 {
+  "framework": "other",
+  "buildCommand": "npm ci && npx expo export --platform web --output-dir dist --clear",
+  "outputDirectory": "dist",
   "rewrites": [
     {
       "source": "/(.*)",

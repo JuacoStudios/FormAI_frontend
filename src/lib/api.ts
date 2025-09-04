@@ -247,12 +247,3 @@ export async function scan(imageFile: File): Promise<ScanResponse> {
   return response.json();
 }
 
-/**
- * Create a Stripe checkout session
- */
-export async function createCheckout(plan: 'monthly' | 'annual'): Promise<CheckoutResponse> {
-  return apiRequest<CheckoutResponse>('/api/checkout', {
-    method: 'POST',
-    body: JSON.stringify({ plan }),
-  });
-}

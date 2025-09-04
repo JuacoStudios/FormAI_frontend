@@ -15,8 +15,9 @@ const tokenCache = {
   },
 };
 
-const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY!;
-const instanceDomain = new URL(process.env.EXPO_PUBLIC_CLERK_INSTANCE_URL!).host;
+const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
+const instanceUrl = process.env.EXPO_PUBLIC_CLERK_INSTANCE_URL;
+const instanceDomain = instanceUrl ? new URL(instanceUrl).host : undefined;
 
 export default function RootLayout() {
   useFrameworkReady();
@@ -32,6 +33,16 @@ export default function RootLayout() {
       });
     }
   }, []);
+
+  // Only render ClerkProvider if we have the required keys
+  if (!publishableKey) {
+    return (
+      <>
+        <Slot />
+        <StatusBar style="auto" />
+      </>
+    );
+  }
 
   return (
     <ClerkProvider 
