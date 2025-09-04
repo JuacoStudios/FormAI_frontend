@@ -1,9 +1,8 @@
 {
-  "version": 2,
-  "framework": null,
-  "buildCommand": "npm ci && npm run build:web",
-  "outputDirectory": "dist",
   "rewrites": [
-    { "source": "/(.*)", "destination": "/" }
+    {
+      "source": "/(.*)",
+      "destination": "/"
+    }
   ]
 }
