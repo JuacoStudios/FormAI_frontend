@@ -1,18 +1,10 @@
 import { createClient } from '@supabase/supabase-js';
 
 export async function POST(request: Request) {
-  // Set CORS headers
+  // CORS headers are handled by the backend (Render)
   const headers = {
     'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
   };
-
-  // Handle preflight requests
-  if (request.method === 'OPTIONS') {
-    return new Response(null, { headers });
-  }
 
   try {
     // Parse request body

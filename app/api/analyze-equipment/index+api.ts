@@ -3,16 +3,10 @@ import Constants from 'expo-constants';
 import { config } from '../../config';
 
 export async function POST(request: Request) {
+  // CORS headers are handled by the backend (Render)
   const headers = {
     'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, Accept',
   };
-
-  if (request.method === 'OPTIONS') {
-    return new Response(null, { headers });
-  }
 
   try {
     const body = await request.json().catch(() => ({}));
