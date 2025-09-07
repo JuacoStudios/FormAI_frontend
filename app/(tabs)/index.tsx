@@ -306,7 +306,8 @@ export default function ScanScreen() {
       
       // Verificar conectividad antes de hacer la llamada
       try {
-        const testResponse = await fetch(requestUrl, { method: 'HEAD' });
+        const healthUrl = buildApiUrl(config.backend.apiBaseUrl, 'health');
+        const testResponse = await fetch(healthUrl, { method: 'GET' });
         console.log('✅ Backend reachable, status:', testResponse.status);
       } catch (connectError) {
         console.error('❌ Backend not reachable:', connectError);
@@ -446,7 +447,8 @@ export default function ScanScreen() {
       
       // Verificar conectividad antes de hacer la llamada
       try {
-        const testResponse = await fetch(requestUrl, { method: 'HEAD' });
+        const healthUrl = buildApiUrl(config.backend.apiBaseUrl, 'health');
+        const testResponse = await fetch(healthUrl, { method: 'GET' });
         console.log('✅ Backend reachable, status:', testResponse.status);
       } catch (connectError) {
         console.error('❌ Backend not reachable:', connectError);
