@@ -300,7 +300,7 @@ export default function ScanScreen() {
       const formData = new FormData();
       formData.append('image', blob, 'equipment.jpg');
       
-      const requestUrl = `${config.backend.apiBaseUrl}/analyze`;
+      const requestUrl = `${config.backend.apiBaseUrl}/api/analyze`;
       console.log('🌐 Enviando a:', requestUrl);
       
       // Verificar conectividad antes de hacer la llamada
@@ -316,6 +316,7 @@ export default function ScanScreen() {
       const response = await fetch(requestUrl, {
         method: 'POST',
         body: formData,
+        credentials: 'include',            // important for device/session cookies
         headers: {
           'Accept': 'application/json',
         },
@@ -439,7 +440,7 @@ export default function ScanScreen() {
       const formData = new FormData();
       formData.append('image', blob, 'equipment.jpg');
       
-      const requestUrl = `${config.backend.apiBaseUrl}/analyze`;
+      const requestUrl = `${config.backend.apiBaseUrl}/api/analyze`;
       console.log('🌐 Enviando a:', requestUrl);
       
       // Verificar conectividad antes de hacer la llamada
@@ -455,6 +456,7 @@ export default function ScanScreen() {
       const response = await fetch(requestUrl, {
         method: 'POST',
         body: formData,
+        credentials: 'include',            // important for device/session cookies
         headers: {
           'Accept': 'application/json',
         },
