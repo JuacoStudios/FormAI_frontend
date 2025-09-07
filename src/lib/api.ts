@@ -2,6 +2,7 @@
 let warned = false;
 
 import { USE_PAYMENT_LINKS } from './payments';
+import { buildApiUrl } from './url';
 
 export const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/+$/, '') ||
@@ -17,10 +18,10 @@ export const API_BASE =
 
 export const WEB_ORIGIN = process.env.NEXT_PUBLIC_WEB_ORIGIN || (typeof window !== "undefined" ? window.location.origin : "");
 
-// URL joiner to avoid double slashes
+// URL joiner to avoid double slashes - now uses buildApiUrl
 export function apiUrl(path: string) {
-  const p = path.startsWith('/') ? path : `/${path}`;
-  return `${API_BASE}${p}`;
+  const cleanPath = path.replace(/^\/+/, '');
+  return buildApiUrl(API_BASE, cleanPath);
 }
 
 // API client with credentials support

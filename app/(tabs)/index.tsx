@@ -6,6 +6,7 @@ import { BlurView } from 'expo-blur';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import config from '../config';
+import { buildApiUrl } from '../../src/lib/url';
 import { usePaywall } from '@/hooks/usePaywall';
 import PaywallScreen from '@/components/PaywallScreen';
 import { Linking } from 'react-native';
@@ -300,7 +301,7 @@ export default function ScanScreen() {
       const formData = new FormData();
       formData.append('image', blob, 'equipment.jpg');
       
-      const requestUrl = `${config.backend.apiBaseUrl}/api/analyze`;
+      const requestUrl = buildApiUrl(config.backend.apiBaseUrl, 'analyze');
       console.log('🌐 Enviando a:', requestUrl);
       
       // Verificar conectividad antes de hacer la llamada
@@ -440,7 +441,7 @@ export default function ScanScreen() {
       const formData = new FormData();
       formData.append('image', blob, 'equipment.jpg');
       
-      const requestUrl = `${config.backend.apiBaseUrl}/api/analyze`;
+      const requestUrl = buildApiUrl(config.backend.apiBaseUrl, 'analyze');
       console.log('🌐 Enviando a:', requestUrl);
       
       // Verificar conectividad antes de hacer la llamada

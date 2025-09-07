@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import Constants from 'expo-constants';
 import { config } from '../../config';
+import { buildApiUrl } from '../../src/lib/url';
 
 export async function POST(request: Request) {
   // CORS headers are handled by the backend (Render)
@@ -25,7 +26,7 @@ export async function POST(request: Request) {
     }
 
     // Call OpenAI Vision API using centralized config
-    const openaiResponse = await fetch(`${config.backend.apiBaseUrl}/api/analyze`, {
+    const openaiResponse = await fetch(buildApiUrl(config.backend.apiBaseUrl, 'analyze'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

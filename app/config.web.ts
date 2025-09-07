@@ -22,7 +22,7 @@ export interface Config {
 // Web environment variables
 const webConfig: Config = {
   backend: {
-    apiBaseUrl: 'https://formai-backend-dc3u.onrender.com/api',
+    apiBaseUrl: 'https://formai-backend-dc3u.onrender.com',
   },
   openai: {
     apiKey: '',

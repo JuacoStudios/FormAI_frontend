@@ -82,6 +82,16 @@ console.log('🔧 Config loaded:', {
   backend: config.backend.apiBaseUrl
 });
 
+// Debug logs for development builds only
+if (process.env.NODE_ENV === 'development' || process.env.NODE_ENV !== 'production') {
+  const { buildApiUrl } = require('../src/lib/url');
+  console.log('🔗 API URL Builder Debug:', {
+    apiBaseUrl: config.backend.apiBaseUrl,
+    sampleAnalyzeUrl: buildApiUrl(config.backend.apiBaseUrl, 'analyze'),
+    sampleScanUrl: buildApiUrl(config.backend.apiBaseUrl, 'scan'),
+  });
+}
+
 // Validate environment variables on import
 if (typeof window !== 'undefined') {
   // Only validate in browser environment
