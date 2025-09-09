@@ -6,6 +6,7 @@ import { BlurView } from 'expo-blur';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import config from '../config';
+import { buildApiUrl } from '../../src/lib/url';
 import { usePaywall } from '@/hooks/usePaywall';
 import PaywallScreen from '@/components/PaywallScreen';
 import { Linking } from 'react-native';
@@ -300,12 +301,13 @@ export default function ScanScreen() {
       const formData = new FormData();
       formData.append('image', blob, 'equipment.jpg');
       
-      const requestUrl = `${config.backend.apiBaseUrl}/analyze`;
+      const requestUrl = buildApiUrl(config.backend.apiBaseUrl, 'scan');
       console.log('🌐 Enviando a:', requestUrl);
       
       // Verificar conectividad antes de hacer la llamada
       try {
-        const testResponse = await fetch(requestUrl, { method: 'HEAD' });
+        const healthUrl = buildApiUrl(config.backend.apiBaseUrl, 'health');
+        const testResponse = await fetch(healthUrl, { method: 'GET' });
         console.log('✅ Backend reachable, status:', testResponse.status);
       } catch (connectError) {
         console.error('❌ Backend not reachable:', connectError);
@@ -316,6 +318,7 @@ export default function ScanScreen() {
       const response = await fetch(requestUrl, {
         method: 'POST',
         body: formData,
+        credentials: 'include',            // important for device/session cookies
         headers: {
           'Accept': 'application/json',
         },
@@ -439,12 +442,13 @@ export default function ScanScreen() {
       const formData = new FormData();
       formData.append('image', blob, 'equipment.jpg');
       
-      const requestUrl = `${config.backend.apiBaseUrl}/analyze`;
+      const requestUrl = buildApiUrl(config.backend.apiBaseUrl, 'scan');
       console.log('🌐 Enviando a:', requestUrl);
       
       // Verificar conectividad antes de hacer la llamada
       try {
-        const testResponse = await fetch(requestUrl, { method: 'HEAD' });
+        const healthUrl = buildApiUrl(config.backend.apiBaseUrl, 'health');
+        const testResponse = await fetch(healthUrl, { method: 'GET' });
         console.log('✅ Backend reachable, status:', testResponse.status);
       } catch (connectError) {
         console.error('❌ Backend not reachable:', connectError);
@@ -455,6 +459,7 @@ export default function ScanScreen() {
       const response = await fetch(requestUrl, {
         method: 'POST',
         body: formData,
+        credentials: 'include',            // important for device/session cookies
         headers: {
           'Accept': 'application/json',
         },

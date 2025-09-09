@@ -156,6 +156,7 @@ export default function PaywallScreen({
         }
         console.debug('[Paywall] Identity initialized:', identity);
         
+        
         // Check subscription status (disabled when using Payment Links)
         if (identity.userId && !USE_PAYMENT_LINKS) {
           try {

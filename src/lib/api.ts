@@ -2,6 +2,7 @@
 let warned = false;
 
 import { USE_PAYMENT_LINKS } from './payments';
+import { buildApiUrl } from './url';
 
 export const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/+$/, '') ||
@@ -17,10 +18,33 @@ export const API_BASE =
 
 export const WEB_ORIGIN = process.env.NEXT_PUBLIC_WEB_ORIGIN || (typeof window !== "undefined" ? window.location.origin : "");
 
-// URL joiner to avoid double slashes
+// URL joiner to avoid double slashes - now uses buildApiUrl
 export function apiUrl(path: string) {
-  const p = path.startsWith('/') ? path : `/${path}`;
-  return `${API_BASE}${p}`;
+  const cleanPath = path.replace(/^\/+/, '');
+  return buildApiUrl(API_BASE, cleanPath);
+}
+
+// API client with credentials support
+async function apiRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const url = apiUrl(path);
+  
+  const response = await fetch(url, {
+    credentials: 'include', // Include cookies for device tracking
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      ...options.headers,
+    },
+    ...options,
+  });
+
+  if (!response.ok) {
+    const error = new Error(`HTTP ${response.status}: ${response.statusText}`);
+    (error as any).code = response.status;
+    throw error;
+  }
+
+  return response.json();
 }
 
 // API health check and startup assertion
@@ -171,3 +195,56 @@ export async function getStripePrices() {
   if (!r.ok) throw new Error("Failed to fetch Stripe prices");
   return await r.json();
 }
+
+// NEW API FUNCTIONS FOR ONE-FREE-SCAN FLOW
+
+export interface EntitlementResponse {
+  active: boolean;
+  expiresAt?: number;
+  scansUsed: number;
+  limit: number;
+}
+
+export interface ScanResponse {
+  success: boolean;
+  message: string;
+}
+
+export interface CheckoutResponse {
+  url: string;
+}
+
+/**
+ * Get entitlement status for the current device
+ */
+export async function getEntitlement(): Promise<EntitlementResponse> {
+  return apiRequest<EntitlementResponse>('/api/entitlement');
+}
+
+/**
+ * Perform a scan with server-side gating
+ */
+export async function scan(imageFile: File): Promise<ScanResponse> {
+  const formData = new FormData();
+  formData.append('image', imageFile);
+  
+  const response = await fetch(apiUrl('/api/scan'), {
+    method: 'POST',
+    credentials: 'include',
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const error = new Error(`HTTP ${response.status}: ${response.statusText}`);
+    (error as any).code = response.status;
+    if (response.status === 402) {
+      const errorData = await response.json();
+      (error as any).requirePaywall = errorData.requirePaywall;
+      (error as any).reason = errorData.reason;
+    }
+    throw error;
+  }
+
+  return response.json();
+}
+

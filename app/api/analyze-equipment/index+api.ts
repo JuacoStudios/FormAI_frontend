@@ -1,18 +1,13 @@
 import { createClient } from '@supabase/supabase-js';
 import Constants from 'expo-constants';
 import { config } from '../../config';
+import { buildApiUrl } from '../../src/lib/url';
 
 export async function POST(request: Request) {
+  // CORS headers are handled by the backend (Render)
   const headers = {
     'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, Accept',
   };
-
-  if (request.method === 'OPTIONS') {
-    return new Response(null, { headers });
-  }
 
   try {
     const body = await request.json().catch(() => ({}));
@@ -31,7 +26,7 @@ export async function POST(request: Request) {
     }
 
     // Call OpenAI Vision API using centralized config
-    const openaiResponse = await fetch(`${config.backend.apiBaseUrl}/api/analyze`, {
+    const openaiResponse = await fetch(buildApiUrl(config.backend.apiBaseUrl, 'scan'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -45,6 +40,7 @@ export async function POST(request: Request) {
             content: [
               {
                 type: 'text',
+           
                 text: 'What gym equipment is shown in this image? Provide a brief, clear explanation of how to use it properly. Keep the response concise and focused on proper form and usage.',
               },
               {

@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import { normalizeBaseUrl } from '../src/lib/url';
 
 export interface Config {
   backend: {
@@ -60,7 +61,7 @@ const validateEnvVars = () => {
 
 const config: Config = {
   backend: {
-    apiBaseUrl: getEnvVar('EXPO_PUBLIC_API_BASE_URL') || 'https://formai-backend-dc3u.onrender.com',
+    apiBaseUrl: normalizeBaseUrl(getEnvVar('EXPO_PUBLIC_API_BASE_URL') || 'https://formai-backend-dc3u.onrender.com'),
   },
   openai: {
     apiKey: getEnvVar('OPENAI_API_KEY') || '',
@@ -81,6 +82,14 @@ console.log('🔧 Config loaded:', {
   platform: Platform.OS,
   backend: config.backend.apiBaseUrl
 });
+
+// Debug logs for development builds only
+if (process.env.NODE_ENV === 'development' || process.env.NODE_ENV !== 'production') {
+  const { buildApiUrl } = require('../src/lib/url');
+  console.log('[CFG] apiBaseUrl =', config.backend.apiBaseUrl);
+  console.log('[URL] scan =', buildApiUrl(config.backend.apiBaseUrl, 'scan'));
+  console.log('[URL] health =', buildApiUrl(config.backend.apiBaseUrl, 'health'));
+}
 
 // Validate environment variables on import
 if (typeof window !== 'undefined') {
