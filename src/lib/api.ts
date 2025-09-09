@@ -205,6 +205,23 @@ export interface EntitlementResponse {
   limit: number;
 }
 
+export interface AnalyzeResponse {
+  success: boolean;
+  machine: { id: string; name: string; confidence: number };
+  instructions: string[];
+  mistakes: string[];
+  recommendations: string[];
+  previewUrl: string | null;
+}
+
+export function isAnalyzeResponse(x: any): x is AnalyzeResponse {
+  return !!x?.success && 
+         x?.machine?.name && 
+         Array.isArray(x?.instructions) &&
+         Array.isArray(x?.mistakes) &&
+         Array.isArray(x?.recommendations);
+}
+
 export interface ScanResponse {
   success: boolean;
   message: string;
@@ -224,11 +241,11 @@ export async function getEntitlement(): Promise<EntitlementResponse> {
 /**
  * Perform a scan with server-side gating
  */
-export async function scan(imageFile: File): Promise<ScanResponse> {
+export async function scan(imageFile: File): Promise<AnalyzeResponse> {
   const formData = new FormData();
   formData.append('image', imageFile);
   
-  const response = await fetch(apiUrl('/api/scan'), {
+  const response = await fetch(apiUrl('/api/analyze'), {
     method: 'POST',
     credentials: 'include',
     body: formData,
@@ -245,6 +262,11 @@ export async function scan(imageFile: File): Promise<ScanResponse> {
     throw error;
   }
 
-  return response.json();
+  const data = await response.json();
+  if (!isAnalyzeResponse(data)) {
+    throw new Error('La respuesta del backend no tiene el formato esperado');
+  }
+  
+  return data;
 }
 

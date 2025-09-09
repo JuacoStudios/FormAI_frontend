@@ -301,8 +301,9 @@ export default function ScanScreen() {
       const formData = new FormData();
       formData.append('image', blob, 'equipment.jpg');
       
-      const requestUrl = buildApiUrl(config.backend.apiBaseUrl, 'scan');
+      const requestUrl = buildApiUrl(config.backend.apiBaseUrl, 'analyze');
       console.log('🌐 Enviando a:', requestUrl);
+      console.log('🔧 FORCE UPDATE: Using /api/analyze endpoint');
       
       // Verificar conectividad antes de hacer la llamada
       try {
@@ -341,13 +342,14 @@ export default function ScanScreen() {
         throw new Error('Respuesta del servidor no es JSON válido');
       }
       
-      if (!data.success || !data.message) {
+      if (!data.success || !data.machine || !data.instructions) {
         throw new Error('La respuesta del backend no tiene el formato esperado');
       }
       
-      // Muestra el resultado en pantalla
-      setResult(data.message);
-      console.log('📱 Resultado mostrado en UI:', data.message);
+      // Muestra el resultado estructurado en pantalla
+      const formattedResult = `Máquina: ${data.machine.name}\n\nInstrucciones:\n${data.instructions.map((i, idx) => `${idx + 1}. ${i}`).join('\n')}\n\nErrores comunes:\n${data.mistakes.map((m, idx) => `${idx + 1}. ${m}`).join('\n')}\n\nRecomendaciones:\n${data.recommendations.map((r, idx) => `${idx + 1}. ${r}`).join('\n')}`;
+      setResult(formattedResult);
+      console.log('📱 Resultado mostrado en UI:', formattedResult);
       
       // Incrementar el contador solo después de un escaneo exitoso
       const newCount = await incrementScanCount();
@@ -442,8 +444,9 @@ export default function ScanScreen() {
       const formData = new FormData();
       formData.append('image', blob, 'equipment.jpg');
       
-      const requestUrl = buildApiUrl(config.backend.apiBaseUrl, 'scan');
+      const requestUrl = buildApiUrl(config.backend.apiBaseUrl, 'analyze');
       console.log('🌐 Enviando a:', requestUrl);
+      console.log('🔧 FORCE UPDATE: Using /api/analyze endpoint');
       
       // Verificar conectividad antes de hacer la llamada
       try {
