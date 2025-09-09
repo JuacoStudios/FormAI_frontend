@@ -301,7 +301,7 @@ export default function ScanScreen() {
       const formData = new FormData();
       formData.append('image', blob, 'equipment.jpg');
       
-      const requestUrl = buildApiUrl(config.backend.apiBaseUrl, 'analyze');
+      const requestUrl = buildApiUrl(config.backend.apiBaseUrl, 'scan');
       console.log('🌐 Enviando a:', requestUrl);
       
       // Verificar conectividad antes de hacer la llamada
@@ -442,7 +442,7 @@ export default function ScanScreen() {
       const formData = new FormData();
       formData.append('image', blob, 'equipment.jpg');
       
-      const requestUrl = buildApiUrl(config.backend.apiBaseUrl, 'analyze');
+      const requestUrl = buildApiUrl(config.backend.apiBaseUrl, 'scan');
       console.log('🌐 Enviando a:', requestUrl);
       
       // Verificar conectividad antes de hacer la llamada

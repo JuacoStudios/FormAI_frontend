@@ -87,7 +87,7 @@ console.log('🔧 Config loaded:', {
 if (process.env.NODE_ENV === 'development' || process.env.NODE_ENV !== 'production') {
   const { buildApiUrl } = require('../src/lib/url');
   console.log('[CFG] apiBaseUrl =', config.backend.apiBaseUrl);
-  console.log('[URL] analyze =', buildApiUrl(config.backend.apiBaseUrl, 'analyze'));
+  console.log('[URL] scan =', buildApiUrl(config.backend.apiBaseUrl, 'scan'));
   console.log('[URL] health =', buildApiUrl(config.backend.apiBaseUrl, 'health'));
 }
 
