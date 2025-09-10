@@ -26,7 +26,7 @@ export async function POST(request: Request) {
     }
 
     // Call OpenAI Vision API using centralized config
-    const openaiResponse = await fetch(buildApiUrl(config.backend.apiBaseUrl, 'scan'), {
+    const openaiResponse = await fetch(buildApiUrl(config.backend.apiBaseUrl, 'analyze'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
