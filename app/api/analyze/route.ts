@@ -1,98 +1,43 @@
-import { createClient } from '@supabase/supabase-js';
-import Constants from 'expo-constants';
-import { config } from '../../config';
+import { NextRequest, NextResponse } from 'next/server';
+import { config } from '../../../src/config';
 
-export async function POST(request: Request) {
-  const headers = {
-    'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, Accept',
-  };
-
-  if (request.method === 'OPTIONS') {
-    return new Response(null, { headers });
-  }
-
+export async function POST(request: NextRequest) {
   try {
-    const body = await request.json().catch(() => ({}));
+    const body = await request.json();
     const { image } = body;
 
     if (!image) {
-      return new Response(
-        JSON.stringify({ 
-          error: 'No image provided' 
-        }), 
-        { 
-          status: 400,
-          headers,
-        }
+      return NextResponse.json(
+        { error: 'No image provided' },
+        { status: 400 }
       );
     }
 
-    // Call OpenAI Vision API using centralized config
-    const openaiResponse = await fetch(`${config.backend.apiBaseUrl}/api/analyze`, {
+    // Call backend API
+    const response = await fetch(`${config.backend.apiBaseUrl}/analyze`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${config.openai.apiKey}`,
       },
-      body: JSON.stringify({
-        model: 'gpt-4o',
-        messages: [
-          {
-            role: 'user',
-            content: [
-              {
-                type: 'text',
-                text: 'What gym equipment is shown in this image? Provide a brief, clear explanation of how to use it properly. Keep the response concise and focused on proper form and usage.',
-              },
-              {
-                type: 'image_url',
-                image_url: {
-                  url: `data:image/jpeg;base64,${image}`,
-                },
-              },
-            ],
-          },
-        ],
-        max_tokens: 300,
-      }),
+      body: JSON.stringify({ image }),
     });
 
-    if (!openaiResponse.ok) {
-      const errorData = await openaiResponse.json();
-      throw new Error(errorData.error?.message || 'Failed to analyze image');
+    if (!response.ok) {
+      const errorData = await response.json();
+      return NextResponse.json(
+        { error: errorData.error || 'Analysis failed' },
+        { status: response.status }
+      );
     }
 
-    const data = await openaiResponse.json();
-    const explanation = data.choices[0]?.message?.content;
-
-    if (!explanation) {
-      throw new Error('No explanation received from OpenAI');
-    }
-
-    return new Response(
-      JSON.stringify({ explanation }),
-      {
-        status: 200,
-        headers,
-      }
-    );
+    const data = await response.json();
+    return NextResponse.json(data);
 
   } catch (error) {
-    console.error('Error analyzing equipment:', error);
-    
-    return new Response(
-      JSON.stringify({ 
-        error: 'Failed to analyze image',
-        details: error instanceof Error ? error.message : 'Unknown error'
-      }), 
-      { 
-        status: 500,
-        headers,
-      }
+    console.error('Analysis error:', error);
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
     );
   }
 }
-

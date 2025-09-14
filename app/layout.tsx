@@ -1,29 +1,24 @@
-import { Slot } from 'expo-router';
-import { useEffect } from 'react';
-import { StatusBar } from 'expo-status-bar';
-import { useFrameworkReady } from '@/hooks/useFrameworkReady';
-import { BUILD_INFO } from '../src/lib/buildInfo';
+import type { Metadata } from 'next'
+import { Inter } from 'next/font/google'
+import './tailwind.css'
 
-export default function RootLayout() {
-  useFrameworkReady();
+const inter = Inter({ subsets: ['latin'] })
 
-  // Log build info once on app boot
-  useEffect(() => {
-    console.debug("[BUILD]", BUILD_INFO);
-    
-    // Development-only readiness probe
-    if (__DEV__) {
-      import('../src/lib/diagnostics').then(({ readinessProbe }) => {
-        readinessProbe().catch(console.error);
-      });
-    }
-  }, []);
-
-  return (
-    <>
-      <Slot />
-      <StatusBar style="auto" />
-    </>
-  );
+export const metadata: Metadata = {
+  title: 'FormAI - Gym Equipment Scanner',
+  description: 'AI-powered gym equipment analysis and guidance',
 }
 
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode
+}) {
+  return (
+    <html lang="en">
+      <body className={inter.className}>
+        {children}
+      </body>
+    </html>
+  )
+}
