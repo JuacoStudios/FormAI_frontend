@@ -3,13 +3,18 @@
 import { useState, useRef } from 'react';
 import { Camera, RotateCcw, Settings, User, History } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
+import PaywallModal from '@/components/PaywallModal';
 
 export default function HomePage() {
   const router = useRouter();
+  const { data: session } = useSession();
   const [analyzing, setAnalyzing] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const [scanCount, setScanCount] = useState(0);
   const [isPremium, setIsPremium] = useState(false);
+  const [hasUsedFreeScan, setHasUsedFreeScan] = useState(false);
+  const [showPaywall, setShowPaywall] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const canScan = isPremium || scanCount < 1;
@@ -18,8 +23,14 @@ export default function HomePage() {
     const file = event.target.files?.[0];
     if (!file) return;
 
+    // Check authentication first
+    if (!session) {
+      router.push('/sign-in');
+      return;
+    }
+
     if (!canScan) {
-      alert('You have reached your scan limit. Please upgrade to Premium for unlimited scans.');
+      setShowPaywall(true);
       return;
     }
 
@@ -45,7 +56,21 @@ export default function HomePage() {
       if (response.ok) {
         setResult(data.explanation);
         setScanCount(prev => prev + 1);
+        
+        // Show paywall after first successful scan
+        if (!hasUsedFreeScan && !isPremium) {
+          setHasUsedFreeScan(true);
+          setShowPaywall(true);
+        }
       } else {
+        // Handle specific error codes
+        if (response.status === 401) {
+          router.push('/sign-in');
+          return;
+        } else if (response.status === 403 && data.code === 'LIMIT_REACHED') {
+          setShowPaywall(true);
+          return;
+        }
         throw new Error(data.error || 'Analysis failed');
       }
     } catch (error) {
@@ -174,6 +199,12 @@ export default function HomePage() {
       <footer className="p-6 text-center text-gray-500">
         <p>© 2024 FormAI. AI-powered gym equipment analysis.</p>
       </footer>
+
+      {/* Paywall Modal */}
+      <PaywallModal 
+        open={showPaywall} 
+        onClose={() => setShowPaywall(false)} 
+      />
     </div>
   );
 }

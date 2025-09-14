@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3001';
 
@@ -40,12 +42,23 @@ export async function POST(request: NextRequest) {
       payload = { image };
     }
 
+    // Get user session for identity
+    const session = await getServerSession(authOptions);
+    
+    // Prepare headers
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    
+    // Add user email if session exists
+    if (session?.user?.email) {
+      headers['x-user-email'] = session.user.email;
+    }
+
     // Call backend API
     const response = await fetch(`${API_BASE}/api/analyze`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers,
       body: JSON.stringify(payload),
     });
 

@@ -1,13 +1,15 @@
-import { v4 as uuidv4 } from "uuid";
-
 const KEY = "formai:userId";
 const EMAIL_KEY = "formai:userEmail";
+
+function generateId(): string {
+  return Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
+}
 
 export function getIdentity() {
   if (typeof window === "undefined") return { userId: "server-render", email: "" };
   let id = window.localStorage.getItem(KEY);
   if (!id) {
-    id = uuidv4();
+    id = generateId();
     window.localStorage.setItem(KEY, id);
   }
   const email = window.localStorage.getItem(EMAIL_KEY) || "";

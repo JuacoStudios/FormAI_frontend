@@ -1,5 +1,4 @@
-// https://docs.expo.dev/guides/using-eslint/
 module.exports = {
-  extends: 'expo',
-  ignorePatterns: ['/dist/*'],
+  extends: 'next/core-web-vitals',
+  ignorePatterns: ['/dist/*', '/.next/*'],
 };

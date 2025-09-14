@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 
 export default function HistoryPage() {
   const router = useRouter();
@@ -50,9 +51,11 @@ export default function HistoryPage() {
             <p className="text-gray-300 mb-4">{selectedScan.result}</p>
             {selectedScan.imageUri && (
               <div className="flex justify-center mb-4">
-                <img 
+                <Image 
                   src={selectedScan.imageUri} 
                   alt="Scan result"
+                  width={224}
+                  height={160}
                   className="w-56 h-40 object-cover rounded-2xl"
                 />
               </div>
