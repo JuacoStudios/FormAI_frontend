@@ -27,11 +27,8 @@ import Animated, {
   ZoomIn,
 } from 'react-native-reanimated';
 import * as WebBrowser from 'expo-web-browser';
-import { createLemonSqueezyCheckout, getProducts, API_BASE, getSubscriptionStatus, assertApiReachable, WEB_ORIGIN } from '../src/lib/api';
-import { goToPayment, USE_PAYMENT_LINKS } from '../src/lib/payments';
+import { createCheckout, getProducts, API_BASE, getSubscriptionStatus, assertApiReachable, ENV_MONTHLY, ENV_ANNUAL, WEB_ORIGIN } from '../src/lib/api';
 import { getIdentity, setUserEmail } from '../src/lib/identity';
-
-
 
 const { width, height } = Dimensions.get('window');
 
@@ -123,12 +120,6 @@ export default function PaywallScreen({
   const pulseAnimation = useSharedValue(1);
   const glowAnimation = useSharedValue(0);
 
-
-  // Memoized computed values for Payment Links
-  const monthlyUrl = useMemo(() => 'https://buy.stripe.com/5kQfZh23y9fjb9tb9Z0co01', []);
-  const annualUrl = useMemo(() => 'https://buy.stripe.com/7sY14n37CezDb9tguj0co00', []);
-  const missingLinks = useMemo(() => false, []); // Always false since we have hardcoded URLs
-
   // Effect hooks
   useEffect(() => {
     if (visible) {
@@ -156,9 +147,8 @@ export default function PaywallScreen({
         }
         console.debug('[Paywall] Identity initialized:', identity);
         
-        
-        // Check subscription status (disabled when using Payment Links)
-        if (identity.userId && !USE_PAYMENT_LINKS) {
+        // Check subscription status
+        if (identity.userId) {
           try {
             const status = await getSubscriptionStatus(identity.userId);
             console.debug('[Paywall] Subscription status:', status);
@@ -223,27 +213,33 @@ export default function PaywallScreen({
       setProducts([]);
       setUsingFallback(true);
       
-      // Fallback to environment variables - not needed with Payment Links
-      setMonthlyId('');
-      setAnnualId('');
+      // Fallback to environment variables
+      setMonthlyId(ENV_MONTHLY || '');
+      setAnnualId(ENV_ANNUAL || '');
       
-      console.debug('[Paywall] Fallback to env prices after error:', { monthly: '', annual: '' });
+      console.debug('[Paywall] Fallback to env prices after error:', { monthly: ENV_MONTHLY, annual: ENV_ANNUAL });
     } finally {
       setProductsLoading(false);
     }
   };
 
-  // Compute subscription availability - always allow checkout
+  // Compute subscription availability
   useEffect(() => {
+    const hasPrices = Boolean(monthlyId && annualId);
     const hasEmail = userEmail.trim().length > 0;
-    setCanSubscribe(hasEmail);
+    const canSub = hasPrices && hasEmail;
+    
+    setCanSubscribe(Boolean(canSub));
     
     console.debug('[Paywall] Subscription availability computed:', {
+      hasPrices,
       hasEmail,
-      canSubscribe: hasEmail,
+      canSubscribe: canSub,
+      monthlyId: !!monthlyId,
+      annualId: !!annualId,
       userEmail: userEmail.trim().length
     });
-  }, [userEmail]);
+  }, [monthlyId, annualId, userEmail]);
 
   // Animation style hooks
   const animatedPulseStyle = useAnimatedStyle(() => {
@@ -271,7 +267,7 @@ export default function PaywallScreen({
       console.log(`🛒 Iniciando compra para: ${selectedPlan.title} (${selectedPlan.variantId})`);
       
       // Create checkout with Lemon Squeezy
-      const checkoutResult = await createLemonSqueezyCheckout({ 
+      const checkoutResult = await createCheckout({ 
         priceId: selectedPlan.variantId,
         customerEmail: userEmail,
         userId: userId,
@@ -302,14 +298,20 @@ export default function PaywallScreen({
     }
   }, [selectedOption, userEmail, userId, onPurchase]);
 
-
-
-  // STRIPE: Handle Stripe subscription with direct navigation
+  // STRIPE: Handle Stripe subscription
   const handleStripeSubscribe = useCallback(async (plan: 'monthly' | 'annual') => {
-    if (stripeLoading) return;
+    console.debug(`[Stripe] Subscribe ${plan} pressed`);
     
     if (!userEmail.trim()) {
       Alert.alert('Error', 'Please enter your email address');
+      return;
+    }
+    
+    const priceId = plan === 'monthly' ? monthlyId : annualId;
+    
+    if (!priceId) {
+      console.warn('[Stripe] missing priceId for', plan);
+      Alert.alert('Error', 'No Stripe priceId available. Check configuration.');
       return;
     }
     
@@ -318,18 +320,49 @@ export default function PaywallScreen({
       
       // Persist user email
       await setUserEmail(userEmail);
+      console.debug('[Stripe] User email persisted:', userEmail);
       
-      // Direct navigation to Stripe Checkout
-      const url = plan === 'monthly' ? monthlyUrl : annualUrl;
-      window.location.assign(url);
+      // Use web URLs derived from WEB_ORIGIN
+      const successUrl = `${WEB_ORIGIN}/purchase/success`;
+      const cancelUrl = `${WEB_ORIGIN}/purchase/cancel`;
       
+      const payload = { 
+        priceId, 
+        customerEmail: userEmail, 
+        userId: userId, 
+        successUrl, 
+        cancelUrl 
+      };
+      
+      console.debug('[Paywall] WEB_ORIGIN:', WEB_ORIGIN);
+      console.debug('[Stripe] createCheckout payload:', payload);
+      
+      const res = await createCheckout(payload);
+      
+      console.debug('[Stripe] checkout response:', res);
+      
+      if (!res.url) {
+        Alert.alert('Error', 'Backend did not return a checkout URL');
+        return;
+      }
+      
+      console.debug('[Stripe] success url:', res.url);
+      
+      // Open checkout with WebBrowser
+      try {
+        const result = await WebBrowser.openBrowserAsync(res.url);
+        console.debug('[Stripe] WebBrowser result:', result);
+      } catch (e) {
+        console.error('[Stripe] WebBrowser error:', e);
+        Alert.alert('Error', 'Could not open checkout in browser');
+      }
     } catch (err) {
-      console.error('[checkout] start failed:', err);
-      Alert.alert('Error', 'We could not start your checkout. Please try again.');
+      console.error('[Stripe] subscribe error:', err);
+      Alert.alert('Error', 'Error creating Stripe checkout session. Check console for details.');
     } finally {
       setStripeLoading(false);
     }
-  }, [userEmail, stripeLoading, monthlyUrl, annualUrl]);
+  }, [monthlyId, annualId, userEmail, userId, WEB_ORIGIN]);
 
   const handleRestore = useCallback(async () => {
     try {
@@ -472,6 +505,8 @@ export default function PaywallScreen({
               </View>
 
               {/* Email Input */}
+
+              {/* Email Input */}
               <View style={styles.emailSection}>
                 <Text style={styles.emailLabel}>Email for subscription:</Text>
                 <TextInput
@@ -491,19 +526,13 @@ export default function PaywallScreen({
                   style={[styles.button, styles.stripeButton]}
                   onPress={() => handleStripeSubscribe('monthly')}
                   disabled={!canSubscribe || stripeLoading}
-                  activeOpacity={0.8}
                 >
                   {stripeLoading ? (
-                    <>
-                      <ActivityIndicator color="#ffffff" />
-                      <Text style={[styles.buttonText, { marginLeft: 8 }]}>
-                        Redirecting…
-                      </Text>
-                    </>
+                    <ActivityIndicator color="#ffffff" />
                   ) : (
                     <>
                       <CreditCard size={20} color="#ffffff" />
-                      <Text style={styles.buttonText}>Subscribe Monthly</Text>
+                      <Text style={styles.buttonText}>Subscribe Monthly (Stripe)</Text>
                     </>
                   )}
                 </TouchableOpacity>
@@ -512,19 +541,13 @@ export default function PaywallScreen({
                   style={[styles.button, styles.stripeButton]}
                   onPress={() => handleStripeSubscribe('annual')}
                   disabled={!canSubscribe || stripeLoading}
-                  activeOpacity={0.8}
                 >
                   {stripeLoading ? (
-                    <>
-                      <ActivityIndicator color="#ffffff" />
-                      <Text style={[styles.buttonText, { marginLeft: 8 }]}>
-                        Redirecting…
-                      </Text>
-                    </>
+                    <ActivityIndicator color="#ffffff" />
                   ) : (
                     <>
                       <CreditCard size={20} color="#ffffff" />
-                      <Text style={styles.buttonText}>Subscribe Annual</Text>
+                      <Text style={styles.buttonText}>Subscribe Annual (Stripe)</Text>
                     </>
                   )}
                 </TouchableOpacity>
@@ -538,17 +561,7 @@ export default function PaywallScreen({
             >
               <TouchableOpacity
                 style={[styles.purchaseButton, purchasing && styles.purchaseButtonDisabled]}
-                onPress={() => {
-                  // Use Payment Links when enabled
-                  if (USE_PAYMENT_LINKS) {
-                    const ok = goToPayment('monthly'); // Default to monthly
-                    if (!ok) {
-                      Alert.alert('Error', 'Payment link is not configured. Please try again later.');
-                    }
-                    return;
-                  }
-                  handlePurchase();
-                }}
+                onPress={handlePurchase}
                 disabled={purchasing || loading}
                 activeOpacity={0.9}
               >
@@ -973,6 +986,5 @@ const styles = StyleSheet.create({
     backgroundColor: '#888888',
     marginHorizontal: 8,
   },
-
 
 });

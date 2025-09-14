@@ -6,7 +6,6 @@ import { BlurView } from 'expo-blur';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import config from '../config';
-import { buildApiUrl } from '../../src/lib/url';
 import { usePaywall } from '@/hooks/usePaywall';
 import PaywallScreen from '@/components/PaywallScreen';
 import { Linking } from 'react-native';
@@ -301,14 +300,12 @@ export default function ScanScreen() {
       const formData = new FormData();
       formData.append('image', blob, 'equipment.jpg');
       
-      const requestUrl = buildApiUrl(config.backend.apiBaseUrl, 'analyze');
-      console.log('[scan] POST', requestUrl);
-      console.log('🔧 FORCE UPDATE: Using /api/analyze endpoint');
+      const requestUrl = `${config.backend.apiBaseUrl}/analyze`;
+      console.log('🌐 Enviando a:', requestUrl);
       
       // Verificar conectividad antes de hacer la llamada
       try {
-        const healthUrl = buildApiUrl(config.backend.apiBaseUrl, 'health');
-        const testResponse = await fetch(healthUrl, { method: 'GET' });
+        const testResponse = await fetch(requestUrl, { method: 'HEAD' });
         console.log('✅ Backend reachable, status:', testResponse.status);
       } catch (connectError) {
         console.error('❌ Backend not reachable:', connectError);
@@ -319,7 +316,6 @@ export default function ScanScreen() {
       const response = await fetch(requestUrl, {
         method: 'POST',
         body: formData,
-        credentials: 'include',            // important for device/session cookies
         headers: {
           'Accept': 'application/json',
         },
@@ -339,33 +335,16 @@ export default function ScanScreen() {
         console.log('✅ API Success:', data);
       } catch (parseError) {
         console.error('❌ Error parsing JSON:', parseError);
-        throw new Error(`Server response is not valid JSON (status ${response.status}): ${responseText.slice(0,120)}`);
+        throw new Error('Respuesta del servidor no es JSON válido');
       }
       
-      // Strict shape check: only accept the scan contract
-      const isScanSuccess =
-        data &&
-        data.success === true &&
-        data.machine &&
-        typeof data.machine.name === 'string' &&
-        typeof data.machine.confidence === 'number' &&
-        Array.isArray(data.instructions);
-
-      if (!isScanSuccess) {
-        console.error('❌ Invalid response format:', data);
+      if (!data.success || !data.message) {
         throw new Error('La respuesta del backend no tiene el formato esperado');
       }
       
-      console.log('[scan] OK:', {
-        name: data.machine?.name,
-        conf: data.machine?.confidence,
-        instructions: data.instructions?.length ?? 0,
-      });
-      
-      // Muestra el resultado estructurado en pantalla
-      const formattedResult = `Máquina: ${data.machine.name}\n\nInstrucciones:\n${data.instructions.map((i, idx) => `${idx + 1}. ${i}`).join('\n')}\n\nErrores comunes:\n${data.mistakes.map((m, idx) => `${idx + 1}. ${m}`).join('\n')}\n\nRecomendaciones:\n${data.recommendations.map((r, idx) => `${idx + 1}. ${r}`).join('\n')}`;
-      setResult(formattedResult);
-      console.log('📱 Resultado mostrado en UI:', formattedResult);
+      // Muestra el resultado en pantalla
+      setResult(data.message);
+      console.log('📱 Resultado mostrado en UI:', data.message);
       
       // Incrementar el contador solo después de un escaneo exitoso
       const newCount = await incrementScanCount();
@@ -460,14 +439,12 @@ export default function ScanScreen() {
       const formData = new FormData();
       formData.append('image', blob, 'equipment.jpg');
       
-      const requestUrl = buildApiUrl(config.backend.apiBaseUrl, 'analyze');
-      console.log('[scan] POST', requestUrl);
-      console.log('🔧 FORCE UPDATE: Using /api/analyze endpoint');
+      const requestUrl = `${config.backend.apiBaseUrl}/analyze`;
+      console.log('🌐 Enviando a:', requestUrl);
       
       // Verificar conectividad antes de hacer la llamada
       try {
-        const healthUrl = buildApiUrl(config.backend.apiBaseUrl, 'health');
-        const testResponse = await fetch(healthUrl, { method: 'GET' });
+        const testResponse = await fetch(requestUrl, { method: 'HEAD' });
         console.log('✅ Backend reachable, status:', testResponse.status);
       } catch (connectError) {
         console.error('❌ Backend not reachable:', connectError);
@@ -478,7 +455,6 @@ export default function ScanScreen() {
       const response = await fetch(requestUrl, {
         method: 'POST',
         body: formData,
-        credentials: 'include',            // important for device/session cookies
         headers: {
           'Accept': 'application/json',
         },
@@ -498,7 +474,7 @@ export default function ScanScreen() {
         console.log('✅ API Success:', data);
       } catch (parseError) {
         console.error('❌ Error parsing JSON:', parseError);
-        throw new Error(`Server response is not valid JSON (status ${response.status}): ${responseText.slice(0,120)}`);
+        throw new Error('Respuesta del servidor no es JSON válido');
       }
       
       if (data.success && data.result) {
@@ -615,6 +591,13 @@ export default function ScanScreen() {
                   <Text style={styles.debugPremiumButtonText}>Make Premium</Text>
                 </TouchableOpacity>
                 
+                <TouchableOpacity
+                  style={styles.debugStatusButton}
+                  onPress={() => {
+                    Alert.alert('Estado Actual', `Premium: ${isPremium}\nScan Count: ${scanCount}\nCan Scan: ${canScan}\nShould Show Paywall: ${shouldShowPaywall}`);
+                  }}>
+                  <Text style={styles.debugStatusButtonText}>Status</Text>
+                </TouchableOpacity>
               </>
             )}
           </View>

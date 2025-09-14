@@ -122,10 +122,3 @@ const styles = StyleSheet.create({
 });
 
 
-
-
-
-
-
-
-

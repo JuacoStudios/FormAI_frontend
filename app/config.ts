@@ -1,5 +1,5 @@
+import { Constants } from 'expo-constants';
 import { Platform } from 'react-native';
-import { normalizeBaseUrl } from '../src/lib/url';
 
 export interface Config {
   backend: {
@@ -27,15 +27,21 @@ const getEnvVar = (key: string): string => {
   // For web environment, use hardcoded values
   if (isWeb) {
     const webConfig: Record<string, string> = {
-      'NEXT_PUBLIC_API_BASE_URL': 'https://formai-backend-dc3u.onrender.com',
-      'NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY': '',
+      'EXPO_PUBLIC_API_BASE_URL': 'https://formai-backend-dc3u.onrender.com',
+      'EXPO_PUBLIC_STRIPE_PRICE_ID_MONTHLY': 'price_1RzeKhI5F6u95FnBU2pmitvR',
+      'EXPO_PUBLIC_STRIPE_PRICE_ID_ANNUAL': 'price_1RzeLGI5F6u95FnBCUTKO0ap',
       'EXPO_PUBLIC_REVENUECAT_API_KEY': '',
       'OPENAI_API_KEY': ''
     };
     return webConfig[key] || '';
   }
   
-  // Fallback to process.env for native
+  // For native environment, try Constants.expoConfig.extra
+  if (Constants.expoConfig?.extra?.[key]) {
+    return Constants.expoConfig.extra[key];
+  }
+  
+  // Fallback to process.env
   if (typeof process !== 'undefined' && process.env?.[key]) {
     return process.env[key];
   }
@@ -46,14 +52,15 @@ const getEnvVar = (key: string): string => {
 // Validate critical environment variables
 const validateEnvVars = () => {
   const requiredVars = [
-    'NEXT_PUBLIC_API_BASE_URL'
+    'EXPO_PUBLIC_STRIPE_PRICE_ID_MONTHLY',
+    'EXPO_PUBLIC_STRIPE_PRICE_ID_ANNUAL'
   ];
   
   const missingVars = requiredVars.filter(varName => !getEnvVar(varName));
   
   if (missingVars.length > 0) {
     console.warn('⚠️ Missing environment variables:', missingVars);
-    console.warn('Please configure these in Vercel environment variables');
+    console.warn('Please configure these in app.json or your .env file');
   } else {
     console.log('✅ All required environment variables are configured');
   }
@@ -61,14 +68,14 @@ const validateEnvVars = () => {
 
 const config: Config = {
   backend: {
-    apiBaseUrl: normalizeBaseUrl(getEnvVar('EXPO_PUBLIC_API_BASE_URL') || 'https://formai-backend-dc3u.onrender.com'),
+    apiBaseUrl: getEnvVar('EXPO_PUBLIC_API_BASE_URL') || 'https://formai-backend-dc3u.onrender.com',
   },
   openai: {
     apiKey: getEnvVar('OPENAI_API_KEY') || '',
   },
   stripe: {
-    monthlyPriceId: '', // Backend handles price selection
-    annualPriceId: '', // Backend handles price selection
+    monthlyPriceId: getEnvVar('EXPO_PUBLIC_STRIPE_PRICE_ID_MONTHLY') || '',
+    annualPriceId: getEnvVar('EXPO_PUBLIC_STRIPE_PRICE_ID_ANNUAL') || '',
   },
   revenuecat: {
     apiKey: getEnvVar('EXPO_PUBLIC_REVENUECAT_API_KEY') || '',
@@ -80,16 +87,12 @@ const config: Config = {
 // Log configuration for debugging
 console.log('🔧 Config loaded:', {
   platform: Platform.OS,
+  stripe: {
+    monthly: config.stripe.monthlyPriceId,
+    annual: config.stripe.annualPriceId
+  },
   backend: config.backend.apiBaseUrl
 });
-
-// Debug logs for development builds only
-if (process.env.NODE_ENV === 'development' || process.env.NODE_ENV !== 'production') {
-  const { buildApiUrl } = require('../src/lib/url');
-  console.log('[CFG] apiBaseUrl =', config.backend.apiBaseUrl);
-  console.log('[URL] scan =', buildApiUrl(config.backend.apiBaseUrl, 'scan'));
-  console.log('[URL] health =', buildApiUrl(config.backend.apiBaseUrl, 'health'));
-}
 
 // Validate environment variables on import
 if (typeof window !== 'undefined') {

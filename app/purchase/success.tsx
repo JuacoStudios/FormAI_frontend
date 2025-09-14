@@ -5,7 +5,6 @@ import { LinearGradient } from "expo-linear-gradient";
 import { CheckCircle, Home, RefreshCw } from "lucide-react-native";
 import { getIdentity } from "../../src/lib/identity";
 import { getSubscriptionStatus } from "../../src/lib/api";
-import { USE_PAYMENT_LINKS } from "../../src/lib/payments";
 
 export default function PurchaseSuccess() {
   const router = useRouter();
@@ -17,15 +16,6 @@ export default function PurchaseSuccess() {
     const checkSubscriptionStatus = async () => {
       try {
         setLoading(true);
-        
-        // Skip subscription check when Payment Links are enabled
-        if (USE_PAYMENT_LINKS) {
-          console.log('[Stripe] Payment Links enabled, skipping subscription status check');
-          setIsPremium(false);
-          setLoading(false);
-          return;
-        }
-        
         const identity = await getIdentity();
         if (identity.userId) {
           console.log('[Stripe] Checking subscription status for userId:', identity.userId);
