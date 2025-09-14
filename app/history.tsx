@@ -1,6 +1,6 @@
 import { StyleSheet, Text, View, Modal, Image } from 'react-native';
 import { useState } from 'react';
-import ScanHistory from '../../components/ScanHistory';
+import ScanHistory from '../components/ScanHistory';
 
 export default function HistoryScreen() {
   const [selectedScan, setSelectedScan] = useState<any>(null);
@@ -107,3 +107,4 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 });
+

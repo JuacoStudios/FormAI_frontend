@@ -2,8 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, Switch, TextInput, ScrollView } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Settings as SettingsIcon, Target, LineChart } from 'lucide-react-native';
-import GoalProgressDashboard from '../../components/GoalProgressDashboard';
-import { colors } from '../../theme/colors';
+import GoalProgressDashboard from '../components/GoalProgressDashboard';
+import { colors } from '../theme/colors';
 
 type TabKey = 'settings' | 'goals' | 'progress';
 
@@ -465,3 +465,4 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 });
+

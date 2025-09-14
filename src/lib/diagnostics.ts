@@ -9,3 +9,4 @@ export async function readinessProbe() {
   );
   return { apiBase: base, apiOk: ok };
 }
+

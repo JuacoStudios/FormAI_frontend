@@ -5,7 +5,7 @@ import { Camera as CameraIcon, Camera as FlipCamera } from 'lucide-react-native'
 import { BlurView } from 'expo-blur';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
-import config from '../config';
+import config from './config';
 import { usePaywall } from '@/hooks/usePaywall';
 import PaywallScreen from '@/components/PaywallScreen';
 import { Linking } from 'react-native';
@@ -1064,3 +1064,4 @@ const styles = StyleSheet.create({
     zIndex: -1,
   },
 });
+
