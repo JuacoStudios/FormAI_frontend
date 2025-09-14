@@ -1,33 +1,19 @@
-// Centralized API configuration with fallback warning
-let warned = false;
+// Environment variables and constants
+export const API_BASE = process.env.EXPO_PUBLIC_API_BASE!;
+export const ENV_MONTHLY = process.env.EXPO_PUBLIC_STRIPE_PRICE_ID_MONTHLY || "";
+export const ENV_ANNUAL = process.env.EXPO_PUBLIC_STRIPE_PRICE_ID_ANNUAL || "";
+export const WEB_ORIGIN = process.env.EXPO_PUBLIC_WEB_ORIGIN || (typeof window !== "undefined" ? window.location.origin : "");
 
-import { USE_PAYMENT_LINKS } from './payments';
-
-export const API_BASE =
-  process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/+$/, '') ||
-  (() => {
-    const fb = 'https://formai-backend-dc3u.onrender.com';
-    if (!warned && typeof window !== 'undefined') {
-      console.warn('[config] Using fallback API_BASE:', fb,
-        'Set NEXT_PUBLIC_API_BASE_URL in Vercel.');
-      warned = true;
-    }
-    return fb;
-  })();
-
-export const WEB_ORIGIN = process.env.NEXT_PUBLIC_WEB_ORIGIN || (typeof window !== "undefined" ? window.location.origin : "");
-
-// URL joiner to avoid double slashes
-export function apiUrl(path: string) {
-  const p = path.startsWith('/') ? path : `/${path}`;
-  return `${API_BASE}${p}`;
+// Helper function to build full URLs
+function url(path: string) {
+  return `${API_BASE}${path.startsWith('/') ? path : `/${path}`}`;
 }
 
 // API health check and startup assertion
 export async function assertApiReachable() {
   console.debug('[Paywall] API_BASE =', API_BASE);
   try {
-    const r = await fetch(apiUrl('/api/health'));
+    const r = await fetch(url('/api/health'));
     if (!r.ok) throw new Error(`health ${r.status}`);
     const data = await r.json();
     console.debug('[Paywall] /api/health OK', data);
@@ -38,34 +24,9 @@ export async function assertApiReachable() {
   }
 }
 
-// New simplified checkout function for Stripe
-export async function createCheckoutSession(payload = {}) {
-  if (USE_PAYMENT_LINKS) {
-    throw new Error('Legacy checkout disabled when Payment Links are enabled');
-  }
-  
-  const res = await fetch(`${API_BASE}/api/checkout`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-  if (!res.ok) throw new Error(`Checkout failed: ${res.status}`);
-  return res.json() as Promise<{ id?: string; url?: string }>;
-}
-
-
-
 export async function getProducts() {
-  if (USE_PAYMENT_LINKS) {
-    // Return empty structure when Payment Links are enabled
-    return {
-      monthly: null,
-      annual: null
-    };
-  }
-  
   try {
-    const r = await fetch(apiUrl('/api/stripe/products'));
+    const r = await fetch(url('/api/stripe/products'));
     if (!r.ok) {
       console.warn('[API] Stripe products endpoint failed:', r.status, r.statusText);
       throw new Error(`HTTP ${r.status}: ${r.statusText}`);
@@ -74,74 +35,61 @@ export async function getProducts() {
     
     // Check for MISSING_PRICE_IDS error
     if (j.error === "MISSING_PRICE_IDS") {
-      console.warn('[API] Stripe products endpoint returned MISSING_PRICE_IDS');
+      console.warn('[API] Stripe products endpoint returned MISSING_PRICE_IDS, using env fallback');
       throw new Error("MISSING_PRICE_IDS");
     }
     
     return j;
   } catch (error) {
-    console.error('[API] Stripe products fetch failed:', error);
-    // Return empty structure - backend handles price selection
+    console.error('[API] Stripe products fetch failed, using fallback env prices:', error);
+    // Return fallback structure using ENV constants
     return {
-      monthly: null,
-      annual: null
+      monthly: ENV_MONTHLY || null,
+      annual: ENV_ANNUAL || null
     };
   }
 }
 
-export async function createCheckout(plan: 'monthly' | 'annual') {
-  if (USE_PAYMENT_LINKS) {
-    throw new Error('Legacy checkout disabled when Payment Links are enabled');
-  }
-  
-  const res = await fetch(`${API_BASE}/api/checkout`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-    body: JSON.stringify({ plan }),
-  });
-  if (!res.ok) throw new Error(`Checkout failed: ${res.status}`);
-  return res.json() as Promise<{ url?: string; id?: string }>;
-}
-
-// Legacy function for Lemon Squeezy (keeping for backward compatibility)
-export async function createLemonSqueezyCheckout(payload: {
+export async function createCheckout(payload: {
   priceId: string;
   customerEmail: string;
   userId: string;
   successUrl: string;
   cancelUrl: string;
 }): Promise<{ url: string }> {
-  console.debug('[LemonSqueezy] createCheckout request:', payload);
+  console.debug('[Stripe] createCheckout request:', payload);
   
   try {
-    const r = await fetch(apiUrl('/api/create-checkout'), {
+    const r = await fetch(url('/api/create-checkout-session'), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        variantId: payload.priceId,
+        priceId: payload.priceId,
         customerEmail: payload.customerEmail,
-        redirectUrl: payload.successUrl
+        userId: payload.userId,
+        successUrl: payload.successUrl,
+        cancelUrl: payload.cancelUrl
       })
     });
     
-    console.debug('[LemonSqueezy] createCheckout response status:', r.status);
+    console.debug('[Stripe] createCheckout response status:', r.status);
     
     if (!r.ok) {
       const errorBody = await r.text();
-      console.error('[LemonSqueezy] createCheckout error response:', errorBody);
+      console.error('[Stripe] createCheckout error response:', errorBody);
       throw new Error(`HTTP ${r.status}: ${errorBody}`);
     }
     
     const j = await r.json();
-    console.debug('[LemonSqueezy] createCheckout success response:', j);
+    console.debug('[Stripe] createCheckout success response:', j);
     
-    if (!j?.checkoutUrl) {
+    if (!j?.url) {
       throw new Error("No checkout URL returned from backend");
     }
     
-    return { url: j.checkoutUrl };
+    return { url: j.url };
   } catch (err: any) {
-    console.error('[LemonSqueezy] createCheckout error:', err);
+    console.error('[Stripe] createCheckout error:', err);
     throw new Error(err.message || "Failed to create checkout session");
   }
 }
@@ -151,23 +99,14 @@ export async function getSubscriptionStatus(userId: string): Promise<{
   plan?: "monthly"|"annual"; 
   currentPeriodEnd?: number 
 }> {
-  if (USE_PAYMENT_LINKS) {
-    // Return default status when Payment Links are enabled
-    return { active: false };
-  }
-  
-  const r = await fetch(apiUrl(`/api/subscription/status?userId=${encodeURIComponent(userId)}`));
+  const r = await fetch(url(`/api/subscription/status?userId=${encodeURIComponent(userId)}`));
   if (!r.ok) throw new Error(`HTTP ${r.status}: ${r.statusText}`);
   return await r.json();
 }
 
 // STRIPE: Get Stripe price configuration status
 export async function getStripePrices() {
-  if (USE_PAYMENT_LINKS) {
-    throw new Error('Stripe prices endpoint disabled when Payment Links are enabled');
-  }
-  
-  const r = await fetch(apiUrl('/api/stripe/prices'));
+  const r = await fetch(url('/api/stripe/prices'));
   if (!r.ok) throw new Error("Failed to fetch Stripe prices");
   return await r.json();
 }
