@@ -338,13 +338,14 @@ export default function ScanScreen() {
         throw new Error('Respuesta del servidor no es JSON válido');
       }
       
-      if (!data.success || !data.message) {
+      const message = data?.message ?? data?.result ?? data?.explanation;
+      if (!data?.success || !message) {
         throw new Error('La respuesta del backend no tiene el formato esperado');
       }
       
       // Muestra el resultado en pantalla
-      setResult(data.message);
-      console.log('📱 Resultado mostrado en UI:', data.message);
+      setResult(message);
+      console.log('📱 Resultado mostrado en UI:', message);
       
       // Incrementar el contador solo después de un escaneo exitoso
       const newCount = await incrementScanCount();
@@ -477,13 +478,14 @@ export default function ScanScreen() {
         throw new Error('Respuesta del servidor no es JSON válido');
       }
       
-      if (data.success && data.result) {
-        setResult(data.result);
+      const message = data?.message ?? data?.result ?? data?.explanation;
+      if (data?.success && message) {
+        setResult(message);
         await incrementScanCount();
         markFirstScanComplete();
         console.log('✅ Análisis completado exitosamente');
       } else {
-        throw new Error(data.error || 'Respuesta inesperada del servidor');
+        throw new Error(data?.error || 'Respuesta inesperada del servidor');
       }
       
     } catch (error) {
