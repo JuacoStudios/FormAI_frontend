@@ -293,32 +293,26 @@ export default function ScanScreen() {
       
       console.log('✅ Imagen capturada, preparando para API...');
       
-      // Prepara la imagen para el backend
-      const blob = base64ToBlob(photo.base64, 'image/jpeg');
-      console.log('📦 Blob creado:', blob.size, 'bytes');
-      
-      const formData = new FormData();
-      formData.append('image', blob, 'equipment.jpg');
-      
+      // Prepara payload JSON con base64 (el backend lo acepta también)
       const requestUrl = `${config.backend.apiBaseUrl}/analyze`;
       console.log('🌐 Enviando a:', requestUrl);
       
-      // Verificar conectividad antes de hacer la llamada
+      // Verificar conectividad antes de hacer la llamada (opcional)
       try {
         const testResponse = await fetch(requestUrl, { method: 'HEAD' });
         console.log('✅ Backend reachable, status:', testResponse.status);
       } catch (connectError) {
-        console.error('❌ Backend not reachable:', connectError);
-        throw new Error('No se puede conectar al servidor. Verifica tu conexión a internet.');
+        console.warn('⚠️ Backend HEAD check failed:', connectError);
       }
       
       // Llama a la API y espera la respuesta
       const response = await fetch(requestUrl, {
         method: 'POST',
-        body: formData,
         headers: {
           'Accept': 'application/json',
+          'Content-Type': 'application/json',
         },
+        body: JSON.stringify({ image: photo.base64 }),
       });
       
       const responseText = await response.text();
@@ -433,13 +427,7 @@ export default function ScanScreen() {
     try {
       console.log('✅ Imagen capturada desde web, preparando para API...');
       
-      // Prepara la imagen para el backend
-      const blob = base64ToBlob(base64, 'image/jpeg');
-      console.log('📦 Blob creado:', blob.size, 'bytes');
-      
-      const formData = new FormData();
-      formData.append('image', blob, 'equipment.jpg');
-      
+      // Prepara JSON con base64 para el backend
       const requestUrl = `${config.backend.apiBaseUrl}/analyze`;
       console.log('🌐 Enviando a:', requestUrl);
       
@@ -455,10 +443,11 @@ export default function ScanScreen() {
       // Llama a la API y espera la respuesta
       const response = await fetch(requestUrl, {
         method: 'POST',
-        body: formData,
         headers: {
           'Accept': 'application/json',
+          'Content-Type': 'application/json',
         },
+        body: JSON.stringify({ image: base64 }),
       });
       
       const responseText = await response.text();

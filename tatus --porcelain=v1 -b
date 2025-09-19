@@ -1,0 +1,80 @@
+[33m47a6e698[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mfix/fe-build-proxy[m[33m, [m[1;31morigin/fix/frontend-auth-stripe-paywall[m[33m, [m[1;31morigin/fix/fe-build-proxy[m[33m, [m[1;32mfix/frontend-auth-stripe-paywall[m[33m)[m feat: implement complete NextAuth + Stripe paywall flow
+[33m44a105a6[m[33m ([m[1;31morigin/fix/restore-scan-auth-stripe[m[33m, [m[1;32mfix/restore-scan-auth-stripe[m[33m)[m Push Frontend cambios 14/09
+[33m49976488[m feat: improve API proxy for analyze endpoint
+[33m017e8283[m fix: update package.json for Vercel deployment
+[33m54e08639[m feat(frontend): push FormAI_new - scan/auth/stripe groundwork
+[33m861ac6fd[m feat(fe): convert to Next.js App Router and remove Expo artifacts
+[33me9b1c6d0[m chore: create branch and inventory current state
+[33m4e3fb1e0[m WIP: estado actual antes de restaurar
+[33m4a0d7878[m fix: harden scan response validation to reject health check format
+[33m3dfa0077[m chore(frontend): route analyze-equipment to /api/analyze
+[33mda232a22[m Force frontend update to use /api/analyze endpoint
+[33mb3defe16[m Merge pull request #6 from JuacoStudios/snapshot/2025-09-01-prod
+[33m63acd3a4[m Fix: Cambiar endpoint de /api/analyze a /api/scan para corregir error de formato de respuesta
+[33ma3c8fdcc[m Frontend already configured with buildApiUrl and credentials: include for /api/analyze
+[33m630d9133[m fix: resolver /api/api/* 404 y estandarizar URLs API
+[33m05078df8[m feat: centralizar construcción de URLs API con buildApiUrl
+[33md073c7dd[m feat: CORS fixes frontend
+[33mb95a4d9d[m feat: agregar credentials include y corregir ruta API para CORS
+[33m51d3b129[m feat: Configure Vercel for static build with @vercel/static-build
+[33m33622f20[m fix: Configure Vercel for Expo Router static build
+[33m78ee2a1b[m fix: Fix Vercel build failure - invalid JSON and add SPA routing
+[33m6eabf075[m feat: Add Clerk email authentication integration
+[33m1f3a90ff[m feat: implement one-free-scan paywall system with database integration
+[33mf1f1cc09[m feat: subscription gating in production
+[33m51bd803c[m[33m ([m[1;33mtag: [m[1;33mprod-2025-09-01[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m, [m[1;32mmain[m[33m)[m fix: Correct annual Stripe URL to proper checkout link
+[33md01c5088[m feat: Implement direct navigation to Stripe Checkout - Replace Payment Links with hardcoded Stripe URLs - Remove Temporarily unavailable banner - Enable buttons without disabled state - Direct navigation to buy.stripe.com URLs - No more API calls to /api/checkout or /api/stripe/*
+[33m9bab2439[m feat: Implement direct navigation to Stripe Checkout
+[33m46e61aed[m feat: Implement direct navigation to Stripe Checkout - Replace Payment Links with hardcoded Stripe URLs - Remove Temporarily unavailable banner - Enable buttons without disabled state - Direct navigation to buy.stripe.com URLs - No more API calls to /api/checkout or /api/stripe/*
+[33m8826462a[m feat: Clean up Payment Links implementation for production - Remove debug UI and hardcoded fallbacks - Use environment-only Payment Links with strict validation - Gate legacy API calls - Disable buttons when Payment Links are missing - Show Temporarily unavailable message - Ensure direct navigation only - TypeScript clean and production-safe
+[33mfdec6a79[m fix: force Payment Links and eliminate legacy /api/checkout calls
+[33mfe201f49[m feat: implement Stripe Payment Links with feature flag
+[33m991937ad[m fix: centralize API configuration and remove legacy EXPO variables
+[33m21f6ba31[m feat: implement direct Stripe checkout navigation without product gating
+[33m9031fea9[m feat: implement Stripe checkout with direct navigation and PayPal support
+[33madc4cba0[m restore: functional version with working scan button and scan history - Restored to commit 7a3986a where everything was working - Scan button properly connected to backend - Scan history functionality restored - All onboarding and paywall features working correctly
+[33m7a3986a4[m[33m ([m[1;33mtag: [m[1;33mv-restore-7a3986a[m[33m)[m feat: Remove onboarding completely and prepare for Vercel production deployment - Remove all onboarding components, routes, and hooks - Update app layout to skip onboarding flow - Configure vercel.json with SPA rewrites - Add diagnostics for development - Update build pipeline for static export - Ready for production deployment without onboarding
+[33mc1b92ac4[m Fix: production parity with local; correct default route; vercel static export
+[33m499845ba[m Implement Vercel-ready Stripe integration: web-safe identity, optimized API endpoints, corrected data structure
+[33mda0dae3e[m Fix Vercel build: web-safe identity.ts, optimized vercel.json, working expo export
+[33mdcff8c8a[m prueba pago 2 - optimización Stripe para producción
+[33m6adb713f[m prueba pago 1 - implementación Stripe para Vercel
+[33me7df9a41[m prueba pago 1
+[33m9d8eeacd[m feat(frontend): integrate Stripe checkout with /api/create-checkout-session and update Paywall
+[33m3cea81e4[m Stripe + RevenueCat integration
+[33m44b7bef4[m[33m ([m[1;31morigin/feature/welcome-modal-formainew[m[33m, [m[1;32mfeature/welcome-modal-formainew[m[33m)[m fix: resolve vercel.json conflict and clean file
+[33mf97b26db[m fix: Simplify Vercel config for SPA deployment with dist/ output - Replace complex vercel.json with simple rewrites-only config - Use correct SPA fallback to /index.html - Remove web-build references and complex headers - Enable clean SPA routing for Expo Web app
+[33m4b8e3790[m Update vercel.json
+[33m79a79e61[m chore(vercel): fix config for SPA rewrites and web build (ignore node_modules, env, pem)
+[33mcea67890[m Merge pull request #3 from JuacoStudios/feature/welcome-modal-formainew
+[33m3f1a45db[m feat: Implement Expo Web PWA with camera fallback and Vercel deployment
+[33me2e4db96[m Merge pull request #2 from JuacoStudios/feature/welcome-modal-formainew
+[33m4caa142f[m feat: complete scan functionality with working buttons and improved UI - Fixed all 4 buttons (Flip Camera, Reset Escaneos, debug buttons) - Added proper z-index layering to prevent overlay blocking - Improved scan overlay with transparent cutout and dark overlay - Enhanced error handling and user feedback with Alert dialogs - Added comprehensive debug logging for troubleshooting - Implemented working scan count reset and paywall management - Added debug utilities for development and testing - Fixed camera permissions and scan flow logic - Improved welcome modal and onboarding experience
+[33m4a9fc437[m Merge onboarding questionnaire from commit e7efd59b
+[33m0071dee1[m feat: add welcome modal with smooth animations
+[33mec27bf03[m Merge pull request #1 from JuacoStudios/feature/welcome-modal
+[33ma50ca938[m feat: add welcome modal with smooth animations
+[33me7efd59b[m feat: implement onboarding questionnaire with dark theme and neon green accents - Add 6-step onboarding flow with questions about fitness goals - Implement dark mode UI with neon green accents and smooth animations - Add persistence with AsyncStorage for onboarding completion - Update diagnostic screen to match new onboarding design - Change 'calorie tracking apps' to 'fitness apps' question - Add proper navigation and state management
+[33m32ec2e72[m Initial commit
+[33mbdb61e5b[m Actualizo proyecto con todos los cambios locales
+[33mf2158d7d[m feat: implement futuristic progress dashboard with radial charts and line graphs in Profile/Goals
+[33md6ae3980[m feat: add diagnostic wizard with pre-scan flow and progress tracking
+[33m048c3f39[m feat: implement new profile screen with tabs and progress tracking
+[33mc04291fb[m Feature: scan history carousel with real images, English UI, and detail modal
+[33m4edbdfdd[m Versión estable: botón de reset de escaneos y mejoras de paywall
+[33md173acb2[m feat(paywall): versión lista para producción, paywall tras segundo escaneo, config backend público
+[33mc7f0cb2e[m fix(paywall): mostrar paywall solo después del resultado del primer escaneo exitoso (index.tsx) y cambios en app.json
+[33m3a21498a[m feat: paywall funcional y RevenueCat integrado
+[33mb230730c[m Updated PaywallScreen.tsx
+[33mc6e1a460[m Premium Paywall Screen with RevenueCat Integration
+[33m46912f3f[m Updated package-lock.json
+[33m1312fdbe[m Premium Paywall Screen with Neon Design
+[33ma60fa42b[m Fix empty app.json configuration
+[33mca04bc98[m Updated .gitignore
+[33m030ee9a2[m fix: restore app.json without secrets
+[33m51486482[m chore: remove .env and add to .gitignore
+[33m3ffc8a3c[m init: frontend project
+[33m977b1f9c[m Backup before UI redesign - submodule
+[33me94eb9eb[m fix: convert base64 to Blob for multer compatibility in production
+[33md43f0d0f[m fix: remove manual Content-Type header to fix multipart boundary error
+[33m2384ff97[m refactor: update API base URL to production backend
